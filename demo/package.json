@@ -1,0 +1,18 @@
+{
+  "name": "suivault-demo-agent",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "setup": "npx tsx setup.ts",
+    "agent": "npx tsx agent.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@mysten/sui": "^1.0.0",
+    "chalk": "^5.3.0",
+    "typescript": "^5.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0"
+  }
+}

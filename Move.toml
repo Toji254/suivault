@@ -1,0 +1,12 @@
+[package]
+name = "suivault"
+edition = "2024"
+version = "0.1.0"
+
+[dependencies]
+# For testnet hackathon demo: rev = "framework/testnet"
+# For production mainnet deployments: pin to a stable release (e.g., rev = "framework/mainnet")
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/testnet" }
+
+[addresses]
+suivault = "0x0"
