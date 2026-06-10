@@ -503,7 +503,7 @@ fun test_deposit() {
         let cap = test_scenario::take_from_sender<VaultOwnerCap>(&scenario);
 
         let extra_coin = coin::mint_for_testing<SUI>(50 * ONE_SUI, test_scenario::ctx(&mut scenario));
-        vault::deposit<SUI>(&mut vault, &cap, extra_coin, test_scenario::ctx(&mut scenario));
+        vault::deposit<SUI>(&mut vault, &cap, extra_coin, &test_clock, test_scenario::ctx(&mut scenario));
 
         assert!(vault::vault_balance(&vault) == HUNDRED_SUI + 50 * ONE_SUI);
 
@@ -533,6 +533,7 @@ fun test_withdraw() {
             &mut vault,
             &cap,
             30 * ONE_SUI,
+            &test_clock,
             test_scenario::ctx(&mut scenario),
         );
 
@@ -622,7 +623,6 @@ fun test_issue_new_key_after_revoke() {
             string::utf8(b"New Agent"),
             SEVEN_DAYS_MS,
             &test_clock,
-            string::utf8(b""),
             test_scenario::ctx(&mut scenario),
         );
 
@@ -726,6 +726,8 @@ fun test_update_policy() {
             @0x0,               // deepbook_pool
             0,                  // max_price
             0,                  // min_price
+            &test_clock,
+            test_scenario::ctx(&mut scenario),
         );
 
         test_scenario::return_to_sender(&scenario, cap);

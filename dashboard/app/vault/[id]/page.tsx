@@ -301,7 +301,8 @@ export default function VaultDetail() {
           arguments: [
             tx.object(vaultId),
             tx.object(capId),
-            depositCoinInput
+            depositCoinInput,
+            tx.object("0x6")
           ]
         });
       }

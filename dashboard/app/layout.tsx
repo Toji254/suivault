@@ -43,7 +43,7 @@ export default function RootLayout({
                   <NeuralVaultMatrix />
                   <div className="bg-ambient" />
                   <Navbar />
-                  <main style={{ padding: "40px 4%", maxWidth: "1200px", margin: "0 auto", position: "relative", zIndex: 1 }}>
+                  <main style={{ padding: "40px 4%", width: "100%", maxWidth: "none", margin: "0", position: "relative", zIndex: 1 }}>
                     {children}
                   </main>
                 </WalletProvider>

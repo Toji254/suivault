@@ -8,6 +8,17 @@ import { Shield, Wallet, ShieldAlert, Cpu, LogOut, History, ExternalLink, Copy, 
 import { useEnokiFlow, useZkLogin } from "@mysten/enoki/react";
 import { ZkLoginModal } from "./ZkLoginModal";
 
+function decodeJwtPayload(jwt?: string) {
+  if (!jwt) return null;
+  try {
+    const payload = jwt.split(".")[1];
+    return JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+  } catch (e) {
+    console.error("Failed to decode zkLogin JWT:", e);
+    return null;
+  }
+}
+
 function RecentTxDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const [txs, setTxs] = useState<any[]>([]);
@@ -262,8 +273,26 @@ export function Navbar() {
       const hash = window.location.hash;
       if (hash.includes("id_token=")) {
         enokiFlow.handleAuthCallback(hash)
-          .then(() => {
-            window.location.hash = "";
+          .then(async () => {
+            const session = await enokiFlow.getSession();
+            const decoded = decodeJwtPayload(session?.jwt);
+            const address = enokiFlow.$zkLoginState.get().address;
+            const provider = enokiFlow.$zkLoginState.get().provider || "google";
+
+            if (address) {
+              localStorage.setItem("zklogin_user", JSON.stringify({
+                email: decoded?.email || decoded?.preferred_username || `${provider}-zklogin-user`,
+                provider,
+                address,
+                isMock: false,
+                loginTime: Date.now(),
+                jwtExpiration: decoded?.exp || Math.floor((session?.expiresAt || Date.now() + 3600000) / 1000),
+                maxEpoch: session?.maxEpoch,
+              }));
+              window.dispatchEvent(new Event("zklogin-auth-change"));
+            }
+
+            history.replaceState(null, "", window.location.pathname + window.location.search);
           })
           .catch((err: any) => {
             console.error("Enoki redirect callback error:", err);
@@ -274,24 +303,21 @@ export function Navbar() {
 
   useEffect(() => {
     if (zkLogin.address) {
-      let email = "enoki-connected@gmail.com";
-      try {
-        const decoded = (enokiFlow as any).getDecodedIdToken();
-        if (decoded && decoded.email) {
-          email = decoded.email;
-        }
-      } catch (e) {
-        console.error("Failed to decode Enoki ID token:", e);
-      }
-
-      const zkSession = {
-        email,
-        provider: zkLogin.provider || "google",
-        address: zkLogin.address,
-        isMock: false
-      };
-      localStorage.setItem("zklogin_user", JSON.stringify(zkSession));
-      window.dispatchEvent(new Event("zklogin-auth-change"));
+      enokiFlow.getSession().then((session) => {
+        const decoded = decodeJwtPayload(session?.jwt);
+        const provider = zkLogin.provider || "google";
+        const zkSession = {
+          email: decoded?.email || decoded?.preferred_username || `${provider}-zklogin-user`,
+          provider,
+          address: zkLogin.address,
+          isMock: false,
+          loginTime: Date.now(),
+          jwtExpiration: decoded?.exp || Math.floor((session?.expiresAt || Date.now() + 3600000) / 1000),
+          maxEpoch: session?.maxEpoch,
+        };
+        localStorage.setItem("zklogin_user", JSON.stringify(zkSession));
+        window.dispatchEvent(new Event("zklogin-auth-change"));
+      });
     }
   }, [zkLogin.address, zkLogin.provider, enokiFlow]);
 
@@ -311,11 +337,6 @@ export function Navbar() {
       window.removeEventListener("zklogin-auth-change", handleAuthChange);
     };
   }, []);
-
-  const openZkModal = (prov: "google" | "twitch") => {
-    setProvider(prov);
-    setModalOpen(true);
-  };
 
   const handleSuccess = (session: any) => {
     localStorage.setItem("zklogin_user", JSON.stringify(session));
@@ -447,8 +468,8 @@ export function Navbar() {
         ) : (
           /* Login Buttons */
           <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-            <button
-              onClick={() => openZkModal("google")}
+            <Link
+              href="/auth?provider=google"
               style={{
                 padding: "7px 14px",
                 fontSize: "0.8rem",
@@ -464,6 +485,7 @@ export function Navbar() {
                 fontFamily: "'Space Grotesk', sans-serif",
                 fontWeight: 500,
                 transition: "all 0.2s ease",
+                textDecoration: "none",
               }}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
@@ -473,9 +495,9 @@ export function Navbar() {
                 <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
               </svg>
               Google
-            </button>
-            <button
-              onClick={() => openZkModal("twitch")}
+            </Link>
+            <Link
+              href="/auth?provider=twitch"
               style={{
                 padding: "7px 14px",
                 fontSize: "0.8rem",
@@ -491,13 +513,14 @@ export function Navbar() {
                 fontFamily: "'Space Grotesk', sans-serif",
                 fontWeight: 500,
                 transition: "all 0.2s ease",
+                textDecoration: "none",
               }}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="#9146FF">
                 <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/>
               </svg>
               Twitch
-            </button>
+            </Link>
           </div>
         )}
         

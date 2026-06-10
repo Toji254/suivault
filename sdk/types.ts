@@ -214,6 +214,9 @@ export type AuditActionType =
   | "spend_blocked"
   | "vault_frozen"
   | "vault_unfrozen"
+  | "funds_deposited"
+  | "funds_withdrawn"
+  | "policy_updated"
   | "key_issued"
   | "key_revoked";
 

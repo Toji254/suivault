@@ -37,13 +37,13 @@ import type {
   AuditEntry,
   VaultStats,
   AuditActionType,
-} from "./types";
+} from "./types.js";
 import {
   parseVault,
   parseVaultKey,
   parseVaultOwnerCap,
   parseAuditEntry,
-} from "./parser";
+} from "./parser.js";
 
 // ============================================================
 // Helper Constants & Utilities
@@ -112,7 +112,7 @@ export class SuiVaultClient {
         tx.pure.u64(params.policy.maxPerDay),
         tx.pure.vector(
           "address",
-          params.policy.allowedRecipients.map((r) => r)
+          params.policy.allowedRecipients.map((r: string) => r)
         ),
         tx.pure.u8(params.policy.activeHoursStart),
         tx.pure.u8(params.policy.activeHoursEnd),
@@ -202,6 +202,7 @@ export class SuiVaultClient {
         tx.object(vaultId),
         tx.object(capId),
         tx.object(coinObjectId),
+        tx.object("0x6"),
       ],
     });
 
@@ -225,6 +226,7 @@ export class SuiVaultClient {
         tx.object(vaultId),
         tx.object(capId),
         tx.pure.u64(amount),
+        tx.object("0x6"),
       ],
     });
 
@@ -275,7 +277,7 @@ export class SuiVaultClient {
         tx.pure.u64(policy.maxPerDay),
         tx.pure.vector(
           "address",
-          policy.allowedRecipients.map((r) => r)
+          policy.allowedRecipients.map((r: string) => r)
         ),
         tx.pure.u8(policy.activeHoursStart),
         tx.pure.u8(policy.activeHoursEnd),
@@ -283,6 +285,7 @@ export class SuiVaultClient {
         tx.pure.address(policy.deepbookPool || "0x0000000000000000000000000000000000000000000000000000000000000000"),
         tx.pure.u64(policy.maxPrice),
         tx.pure.u64(policy.minPrice),
+        tx.object("0x6"),
       ],
     });
 
@@ -426,7 +429,7 @@ export class SuiVaultClient {
       let nextCursor: string | undefined | null = null;
 
       while (hasNextPage) {
-        const res = await this.client.getOwnedObjects({
+        const res: any = await this.client.getOwnedObjects({
           owner: ownerAddress,
           filter: { StructType: `${this.packageId}::vault::VaultOwnerCap` },
           options: { showContent: true },
@@ -482,7 +485,7 @@ export class SuiVaultClient {
       let nextCursor: string | undefined | null = null;
 
       while (hasNextPage) {
-        const res = await this.client.getOwnedObjects({
+        const res: any = await this.client.getOwnedObjects({
           owner: agentAddress,
           filter: { StructType: `${this.packageId}::vault::VaultKey` },
           options: { showContent: true },
@@ -620,8 +623,13 @@ export class SuiVaultClient {
   ): Promise<() => void> {
     try {
       const unsubscribe = await this.client.subscribeEvent({
-        filter: { Package: this.packageId },
-        onMessage: (event) => {
+        filter: {
+          Any: [
+            { MoveModule: { package: this.packageId, module: "vault" } },
+            { MoveModule: { package: this.packageId, module: "audit" } },
+          ],
+        },
+        onMessage: (event: any) => {
           const json = event.parsedJson as any;
           if (json && json.vault_id === vaultId) {
             callback(event);

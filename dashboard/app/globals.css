@@ -140,6 +140,38 @@
   font-family: var(--font-mono);
 }
 
+.auth-section {
+  min-height: calc(100vh - 140px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 0;
+}
+
+.auth-shell {
+  width: 100%;
+  max-width: 980px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  gap: 24px;
+}
+
+.auth-spinner {
+  animation: authSpin 1s linear infinite;
+}
+
+@keyframes authSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 860px) {
+  .auth-shell {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Glassmorphism Containers */
 .glass-panel {
   background: var(--glass-bg);

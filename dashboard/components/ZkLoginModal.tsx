@@ -66,31 +66,30 @@ export function ZkLoginModal({ isOpen, onClose, provider, onSuccess }: ZkLoginMo
     setLoadingReal(true);
     setErrorMsg("");
     try {
-      // Open the mock OAuth portal in a popup window for the showcase/demo
-      const popup = window.open(
-        `/mock-oauth?provider=${provider}`,
-        "oauth-popup",
-        "width=500,height=650,left=100,top=100,resizable=yes,scrollbars=yes"
-      );
+      const clientId = provider === "google"
+        ? process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+        : process.env.NEXT_PUBLIC_TWITCH_CLIENT_ID;
 
-      if (!popup) {
-        throw new Error("Popup blocked by browser. Please enable popups for this site.");
+      if (!clientId) {
+        throw new Error(
+          `Missing ${provider === "google" ? "NEXT_PUBLIC_GOOGLE_CLIENT_ID" : "NEXT_PUBLIC_TWITCH_CLIENT_ID"}. Add the OAuth client ID from your Enoki provider setup to .env.local.`
+        );
       }
 
-      // Check if popup closed
-      const timer = setInterval(() => {
-        if (popup.closed) {
-          clearInterval(timer);
-          setLoadingReal(false);
-          // Check if user session was stored successfully
-          const stored = localStorage.getItem("zklogin_user");
-          if (stored) {
-            onSuccess(JSON.parse(stored));
-          }
-        }
-      }, 1000);
+      const redirectUrl = `${window.location.origin}${window.location.pathname}`;
+      const authUrl = await enokiFlow.createAuthorizationURL({
+        provider,
+        clientId,
+        redirectUrl,
+        network: "testnet",
+        extraParams: {
+          scope: provider === "google" ? ["email", "profile"] : ["user:read:email"],
+        },
+      });
+
+      window.location.assign(authUrl);
     } catch (err: any) {
-      console.error("Mock OAuth redirect failed:", err);
+      console.error("zkLogin OAuth redirect failed:", err);
       setErrorMsg(err.message || "Failed to launch authentication popup.");
       setLoadingReal(false);
     }

@@ -4,6 +4,17 @@ import { useEffect, useState, useCallback } from "react";
 import { useEnokiFlow, useZkLogin } from "@mysten/enoki/react";
 import { useSuiClient } from "@mysten/dapp-kit";
 
+function decodeJwtPayload(jwt?: string) {
+  if (!jwt) return null;
+  try {
+    const payload = jwt.split(".")[1];
+    return JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+  } catch (e) {
+    console.error("Failed to decode zkLogin JWT:", e);
+    return null;
+  }
+}
+
 export interface ZkSessionUser {
   address: string;
   provider: "google" | "twitch";
@@ -81,14 +92,16 @@ export function useZkLoginSession() {
 
       // If Enoki state has active address, hydrate/update metadata
       if (zkLogin.address) {
-        const decoded = (enokiFlow as any).getDecodedIdToken();
-        const expiration = decoded?.exp || Math.floor(Date.now() / 1000) + 3600; // default 1 hour
-        const maxEpoch = decoded?.max_epoch ? Number(decoded.max_epoch) : undefined;
-        const email = decoded?.email || parsedUser?.email || "enoki-connected@gmail.com";
+        const session = await enokiFlow.getSession();
+        const decoded = decodeJwtPayload(session?.jwt);
+        const expiration = decoded?.exp || Math.floor((session?.expiresAt || Date.now() + 3600000) / 1000);
+        const maxEpoch = session?.maxEpoch || parsedUser?.maxEpoch;
+        const provider = (zkLogin.provider as any) || parsedUser?.provider || "google";
+        const email = decoded?.email || decoded?.preferred_username || parsedUser?.email || `${provider}-zklogin-user`;
 
         const updatedUser: ZkSessionUser = {
           address: zkLogin.address,
-          provider: (zkLogin.provider as any) || "google",
+          provider,
           email: email,
           loginTime: parsedUser?.loginTime || Date.now(),
           jwtExpiration: expiration,
@@ -124,7 +137,7 @@ export function useZkLoginSession() {
 
   return {
     user,
-    loading: loading || zkLogin.isLoading,
+    loading,
     isExpired,
     logout,
     checkExpiry: () => user && checkSessionExpiry(user),

@@ -16,9 +16,18 @@ export function VaultCard({ vault }: VaultCardProps) {
   const [loading, setLoading] = useState(true);
   const [agentName, setAgentName] = useState<string>("None");
   const [reputation, setReputation] = useState<number | null>(null);
+  const isPendingLocal = vault.id.startsWith("pending-vault-") || vault.id.startsWith("local-vault-");
 
   useEffect(() => {
     async function loadStats() {
+      if (isPendingLocal) {
+        setStats(null);
+        setAgentName("Syncing");
+        setReputation(null);
+        setLoading(false);
+        return;
+      }
+
       try {
         const data = await vaultClient.getVaultStats(vault.id);
         setStats(data);
@@ -53,7 +62,7 @@ export function VaultCard({ vault }: VaultCardProps) {
     // Auto-refresh stats every 10 seconds
     const interval = setInterval(loadStats, 10000);
     return () => clearInterval(interval);
-  }, [vault.id, vault.agentKeyId]);
+  }, [vault.id, vault.agentKeyId, isPendingLocal]);
 
   const maxPerDaySui = Number(vault.policy.maxPerDay) / 1_000_000_000;
   const todaySpentSui = Number(vault.todaySpent) / 1_000_000_000;
@@ -93,7 +102,12 @@ export function VaultCard({ vault }: VaultCardProps) {
           </span>
         </div>
 
-        {vault.isFrozen ? (
+        {isPendingLocal ? (
+          <span className="badge badge-warning">
+            <Calendar size={12} />
+            Syncing
+          </span>
+        ) : vault.isFrozen ? (
           <span className="badge badge-danger">
             <ShieldAlert size={12} />
             Frozen
@@ -167,9 +181,15 @@ export function VaultCard({ vault }: VaultCardProps) {
       </div>
 
       {/* Actions */}
-      <Link href={`/vault/${vault.id}`} className="btn btn-primary" style={{ marginTop: "auto", width: "100%" }}>
-        Manage Settings
-      </Link>
+      {isPendingLocal ? (
+        <button className="btn btn-secondary" disabled style={{ marginTop: "auto", width: "100%", opacity: 0.65, cursor: "not-allowed" }}>
+          Waiting for On-Chain Sync
+        </button>
+      ) : (
+        <Link href={`/vault/${vault.id}`} className="btn btn-primary" style={{ marginTop: "auto", width: "100%" }}>
+          Manage Settings
+        </Link>
+      )}
     </div>
   );
 }

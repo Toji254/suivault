@@ -104,3 +104,41 @@ npm run dev
 ```
 
 Visit [http://localhost:3000](http://localhost:3000) to view your dashboard!
+
+---
+
+## 🚀 Deploying the Dashboard as a Walrus Site
+
+Walrus Sites allow hosting fully static decentralized websites directly on Walrus with routing/metadata managed by a Sui contract.
+
+To publish this dashboard to Walrus:
+
+### 1. Enable Static HTML Export in Next.js
+Configure Next.js to export statically by editing `dashboard/next.config.js` to include the `output: 'export'` option:
+```javascript
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  output: 'export',
+  reactStrictMode: true,
+  webpack: (config) => {
+    config.resolve.fallback = { fs: false, path: false };
+    config.resolve.modules.push(path.resolve(process.cwd(), "node_modules"));
+    return config;
+  },
+};
+```
+
+### 2. Build the Static Assets
+Run the build script to compile the Next.js pages into static HTML/CSS/JS output:
+```bash
+npm run build
+```
+This generates the static assets in the `dashboard/out/` directory.
+
+### 3. Deploy using Walrus `site-builder`
+Make sure you have a `sites-config.yaml` file configured in the root directory (specifying your wallet context and Sui network settings), then run:
+```bash
+site-builder deploy --epochs 5 ./out
+```
+* **Result**: The site builder compiles the static sitemap, uploads all files to Walrus, and creates/updates the corresponding Walrus Site object on the Sui network.
+* **Accessing your site**: The tool will print the base36 representation of your Site's object ID. You can access it through the public Walrus portal at `http://<BASE36_OBJECT_ID>.walrus.site` or `https://<BASE36_OBJECT_ID>.wal.app`.

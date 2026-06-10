@@ -1,4 +1,4 @@
-import type { Vault, VaultKey } from "./types";
+import type { Vault, VaultKey } from "./types.js";
 
 export interface RiskFactor {
   name: string;
@@ -30,6 +30,8 @@ export interface AuditLogPayload {
 export interface GuardianVerdict {
   allowed: boolean;
   reason?: string;
+  /** Compatibility alias for implementation-plan consumers and mock/offline flows. */
+  mockBlobId: string;
   walrusBlobId: string;
   payload: AuditLogPayload;
 }
@@ -145,14 +147,40 @@ export class AiRiskGuardian {
       explanation,
     };
 
-    // Simulate upload to Walrus by generating a deterministic mock blob ID from hash of payload
     const payloadStr = JSON.stringify(payload);
-    const mockBlobId = "walrus-blob-" + this.simpleHash(payloadStr);
+    let walrusBlobId = "walrus-blob-" + this.simpleHash(payloadStr);
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 4000); // 4 seconds timeout
+      
+      const res = await fetch("https://publisher.walrus-testnet.walrus.space/v1/blobs?epochs=5", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: payloadStr,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        const uploadInfo = await res.json();
+        if (uploadInfo.newlyCreated?.blobObject?.blobId) {
+          walrusBlobId = uploadInfo.newlyCreated.blobObject.blobId;
+        } else if (uploadInfo.alreadyCertified?.blobId) {
+          walrusBlobId = uploadInfo.alreadyCertified.blobId;
+        }
+      }
+    } catch (e) {
+      console.warn("Walrus publisher upload failed, using fallback hash:", e);
+    }
 
     return {
       allowed,
       reason: allowed ? undefined : explanation,
-      walrusBlobId: mockBlobId,
+      mockBlobId: walrusBlobId,
+      walrusBlobId,
       payload,
     };
   }

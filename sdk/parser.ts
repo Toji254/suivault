@@ -1,4 +1,4 @@
-import type { Vault, VaultKey, VaultOwnerCap, AuditEntry, Policy, AuditActionType } from "./types";
+import type { Vault, VaultKey, VaultOwnerCap, AuditEntry, Policy, AuditActionType } from "./types.js";
 
 /**
  * Extracts fields from a raw Sui object response or fields object directly.

@@ -22,6 +22,37 @@ import type { Vault } from "../../sdk/types";
 import { useUnifiedExecutor } from "../hooks/useUnifiedExecutor";
 import AmberCascades from "../components/AmberCascades";
 
+const LOCAL_VAULTS_KEY = "suivault_local_created_vaults";
+
+function reviveVault(raw: any): Vault {
+  return {
+    ...raw,
+    balance: BigInt(raw.balance),
+    todaySpent: BigInt(raw.todaySpent),
+    totalSpent: BigInt(raw.totalSpent),
+    policy: {
+      ...raw.policy,
+      maxPerTx: BigInt(raw.policy.maxPerTx),
+      maxPerDay: BigInt(raw.policy.maxPerDay),
+      maxPrice: BigInt(raw.policy.maxPrice),
+      minPrice: BigInt(raw.policy.minPrice),
+    },
+  };
+}
+
+function loadLocalVaults(owner?: string | null): Vault[] {
+  if (typeof window === "undefined" || !owner) return [];
+  try {
+    const stored = JSON.parse(localStorage.getItem(LOCAL_VAULTS_KEY) || "[]");
+    return stored
+      .filter((vault: any) => String(vault.owner).toLowerCase() === owner.toLowerCase())
+      .map(reviveVault);
+  } catch (e) {
+    console.error("Failed to load local created vaults:", e);
+    return [];
+  }
+}
+
 // Capabilities static showcase config
 const CAPABILITIES = [
   {
@@ -46,16 +77,16 @@ const CAPABILITIES = [
 
 // Agents compatibility grid config
 const AGENTS = [
-  { title: "Arbitrage Swarm", category: "DeFi Execution", year: "2026", image: "images/research-1.jpg" },
-  { title: "Meme Accumulator", category: "Token Trading", year: "2026", image: "images/research-2.jpg" },
-  { title: "Sentiment Tracker", category: "Social Intelligence", year: "2026", image: "images/research-3.jpg" },
-  { title: "Liquidation Bot", category: "Risk Management", year: "2026", image: "images/research-4.jpg" },
+  { slug: "arbitrage", title: "Arbitrage Swarm", category: "DeFi Execution", year: "2026", image: "images/research-1.jpg" },
+  { slug: "meme", title: "Meme Accumulator", category: "Token Trading", year: "2026", image: "images/research-2.jpg" },
+  { slug: "sentiment", title: "Sentiment Tracker", category: "Social Intelligence", year: "2026", image: "images/research-3.jpg" },
+  { slug: "liquidation", title: "Liquidation Bot", category: "Risk Management", year: "2026", image: "images/research-4.jpg" },
 ];
 
 const DEMO_VAULTS: Vault[] = [
   {
     id: "demo-vault-arbitrage",
-    name: "DeFi Arbitrage Agent (Demo)",
+    name: "DeFi Arbitrage Agent Template",
     owner: "0x142df8eaa1bfa7554bc9a71d9105f5a4b039e66ea5e55ea4b38bcb83cb684dc0",
     balance: 450500000000n, // 450.5 SUI
     todaySpent: 35000000000n, // 35 SUI
@@ -78,7 +109,7 @@ const DEMO_VAULTS: Vault[] = [
   },
   {
     id: "demo-vault-meme",
-    name: "MEME Accumulator Bot (Demo)",
+    name: "MEME Accumulator Bot Template",
     owner: "0x142df8eaa1bfa7554bc9a71d9105f5a4b039e66ea5e55ea4b38bcb83cb684dc0",
     balance: 120000000000n,
     todaySpent: 10000000000n,
@@ -101,7 +132,7 @@ const DEMO_VAULTS: Vault[] = [
   },
   {
     id: "demo-vault-liquidator",
-    name: "Liquidator Swarm (Demo - Frozen)",
+    name: "Liquidator Swarm Template",
     owner: "0x142df8eaa1bfa7554bc9a71d9105f5a4b039e66ea5e55ea4b38bcb83cb684dc0",
     balance: 2500000000000n,
     todaySpent: 0n,
@@ -127,6 +158,7 @@ const DEMO_VAULTS: Vault[] = [
 export default function UnifiedHome() {
   const { isConnected, activeAddress } = useUnifiedExecutor();
   const [vaults, setVaults] = useState<Vault[]>([]);
+  const [localVaults, setLocalVaults] = useState<Vault[]>([]);
   const [loading, setLoading] = useState(false);
   const [demoVaults, setDemoVaults] = useState<Vault[]>(DEMO_VAULTS);
 
@@ -183,8 +215,10 @@ export default function UnifiedHome() {
     async function loadVaults() {
       if (!activeAddress) {
         setVaults([]);
+        setLocalVaults([]);
         return;
       }
+      setLocalVaults(loadLocalVaults(activeAddress));
       setLoading(true);
       try {
         const list = await vaultClient.getVaultsByOwner(activeAddress);
@@ -196,6 +230,13 @@ export default function UnifiedHome() {
       }
     }
     loadVaults();
+
+    const handleLocalVaultUpdate = () => {
+      setLocalVaults(loadLocalVaults(activeAddress));
+    };
+
+    window.addEventListener("suivault-local-vaults-update", handleLocalVaultUpdate);
+    return () => window.removeEventListener("suivault-local-vaults-update", handleLocalVaultUpdate);
   }, [activeAddress]);
 
   // 4. GSAP Intersection Observers for Scroll Animations
@@ -272,7 +313,13 @@ export default function UnifiedHome() {
     };
   }, []);
 
-  const displayVaults = [...vaults, ...demoVaults];
+  const liveVaults = [...vaults];
+  for (const localVault of localVaults) {
+    if (!liveVaults.some((vault) => vault.id === localVault.id)) {
+      liveVaults.push(localVault);
+    }
+  }
+  const displayVaults = isConnected ? liveVaults : demoVaults;
 
   return (
     <div style={{ color: "#F0F4FF", minHeight: "100vh", marginTop: "-40px" }}>
@@ -456,7 +503,7 @@ export default function UnifiedHome() {
               </p>
             ) : (
               <p style={{ color: "var(--text-secondary)", fontSize: "0.95rem" }}>
-                Viewing Demo Sandbox. Connect your wallet to create live custom vaults.
+                Sign in with zkLogin or connect a Sui wallet to manage real on-chain vaults.
               </p>
             )}
           </div>
@@ -469,7 +516,7 @@ export default function UnifiedHome() {
           )}
         </div>
 
-        {/* Sandbox alert when not connected */}
+        {/* Starter-template alert when not connected */}
         {!isConnected && (
           <div className="glass-panel" style={{
             padding: "16px 20px",
@@ -486,7 +533,7 @@ export default function UnifiedHome() {
             <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
               <Zap size={18} color="#1e6aff" />
               <span style={{ fontSize: "0.88rem", color: "#a3c4ff" }}>
-                You are currently in Demo Mode. Click any pre-configured vault card below to test limits, key revocations, and policies!
+                Starter templates are shown until you authenticate. After zkLogin/wallet sign-in, this console only shows vaults fetched from Sui testnet.
               </span>
             </div>
             <ConnectButton className="sui-connect-btn" style={{ scale: "0.9" }} />
@@ -498,11 +545,44 @@ export default function UnifiedHome() {
             <div className="spinner"></div>
           </div>
         ) : (
-          <div className="dashboard-grid">
-            {displayVaults.map((vault) => (
-              <VaultCard key={vault.id} vault={vault} />
-            ))}
-          </div>
+          displayVaults.length > 0 ? (
+            <div className="dashboard-grid">
+              {displayVaults.map((vault) => (
+                <VaultCard key={vault.id} vault={vault} />
+              ))}
+            </div>
+          ) : (
+            <div className="glass-panel" style={{
+              padding: "34px",
+              border: "1px solid rgba(30, 106, 255, 0.24)",
+              background: "rgba(30, 106, 255, 0.04)",
+              borderRadius: "12px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "20px",
+              flexWrap: "wrap",
+            }}>
+              <div>
+                <h3 style={{ color: "#fff", margin: "0 0 8px", fontSize: "1.2rem", fontWeight: 600 }}>
+                  No live vaults found for this address
+                </h3>
+                <p style={{ color: "var(--text-secondary)", margin: 0, maxWidth: "620px", lineHeight: 1.6 }}>
+                  Create a vault to issue an on-chain VaultKey, or import an existing external agent from the Agent Keys console.
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+                <Link href="/create" className="btn btn-primary">
+                  <Plus size={16} />
+                  Create Vault
+                </Link>
+                <Link href="/agent" className="btn btn-secondary">
+                  <Cpu size={16} />
+                  Import Agent
+                </Link>
+              </div>
+            </div>
+          )
         )}
       </section>
 
@@ -744,11 +824,22 @@ export default function UnifiedHome() {
               key={`${agent.title}-${i}`}
               ref={(el) => { agentItemRefs.current[i] = el; }}
               className="group cursor-pointer transition-all duration-300"
+              role="button"
+              tabIndex={0}
               style={{
                 borderBottom: "1px solid rgba(94, 110, 133, 0.15)",
                 borderRight: "1px solid rgba(94, 110, 133, 0.15)",
                 padding: "28px 24px",
                 background: "rgba(255, 255, 255, 0.01)",
+              }}
+              onClick={() => {
+                window.location.href = `/agent?strategy=${agent.slug}`;
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  window.location.href = `/agent?strategy=${agent.slug}`;
+                }
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.background = "rgba(30, 106, 255, 0.02)";
@@ -817,6 +908,20 @@ export default function UnifiedHome() {
                 >
                   {agent.year}
                 </span>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  marginTop: "14px",
+                  color: "#8fb4ff",
+                  fontFamily: "'Space Grotesk', monospace",
+                  fontSize: 12,
+                }}
+              >
+                Open strategy
+                <ChevronRight size={14} />
               </div>
             </div>
           ))}

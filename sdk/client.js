@@ -27,7 +27,7 @@
  */
 import { Transaction } from "@mysten/sui/transactions";
 import { SuiClient, getFullnodeUrl } from "@mysten/sui/client";
-import { parseVault, parseVaultKey, parseVaultOwnerCap, parseAuditEntry, } from "./parser";
+import { parseVault, parseVaultKey, parseVaultOwnerCap, parseAuditEntry, } from "./parser.js";
 // ============================================================
 // Helper Constants & Utilities
 // ============================================================
@@ -152,6 +152,7 @@ export class SuiVaultClient {
                 tx.object(vaultId),
                 tx.object(capId),
                 tx.object(coinObjectId),
+                tx.object("0x6"),
             ],
         });
         return tx;
@@ -168,6 +169,7 @@ export class SuiVaultClient {
                 tx.object(vaultId),
                 tx.object(capId),
                 tx.pure.u64(amount),
+                tx.object("0x6"),
             ],
         });
         return tx;
@@ -209,6 +211,7 @@ export class SuiVaultClient {
                 tx.pure.address(policy.deepbookPool || "0x0000000000000000000000000000000000000000000000000000000000000000"),
                 tx.pure.u64(policy.maxPrice),
                 tx.pure.u64(policy.minPrice),
+                tx.object("0x6"),
             ],
         });
         return tx;
@@ -499,7 +502,12 @@ export class SuiVaultClient {
     async subscribeToVaultEvents(vaultId, callback) {
         try {
             const unsubscribe = await this.client.subscribeEvent({
-                filter: { Package: this.packageId },
+                filter: {
+                    Any: [
+                        { MoveModule: { package: this.packageId, module: "vault" } },
+                        { MoveModule: { package: this.packageId, module: "audit" } },
+                    ],
+                },
                 onMessage: (event) => {
                     const json = event.parsedJson;
                     if (json && json.vault_id === vaultId) {

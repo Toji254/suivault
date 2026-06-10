@@ -206,6 +206,71 @@ public fun log_key_revoked(
     entry
 }
 
+/// Create an audit entry for owner deposit
+public fun log_funds_deposited(
+    vault_id: ID,
+    deposited_by: address,
+    amount: u64,
+    timestamp_ms: u64,
+    ctx: &mut TxContext,
+): AuditEntry {
+    create_entry(
+        vault_id,
+        deposited_by,
+        std::string::utf8(b"funds_deposited"),
+        amount,
+        @0x0,
+        timestamp_ms,
+        true,
+        std::string::utf8(b""),
+        std::string::utf8(b""),
+        ctx,
+    )
+}
+
+/// Create an audit entry for owner withdrawal
+public fun log_funds_withdrawn(
+    vault_id: ID,
+    withdrawn_by: address,
+    amount: u64,
+    timestamp_ms: u64,
+    ctx: &mut TxContext,
+): AuditEntry {
+    create_entry(
+        vault_id,
+        withdrawn_by,
+        std::string::utf8(b"funds_withdrawn"),
+        amount,
+        withdrawn_by,
+        timestamp_ms,
+        true,
+        std::string::utf8(b""),
+        std::string::utf8(b""),
+        ctx,
+    )
+}
+
+/// Create an audit entry for owner policy updates
+public fun log_policy_updated(
+    vault_id: ID,
+    updated_by: address,
+    timestamp_ms: u64,
+    ctx: &mut TxContext,
+): AuditEntry {
+    create_entry(
+        vault_id,
+        updated_by,
+        std::string::utf8(b"policy_updated"),
+        0,
+        @0x0,
+        timestamp_ms,
+        true,
+        std::string::utf8(b""),
+        std::string::utf8(b""),
+        ctx,
+    )
+}
+
 // ============================================================
 // Walrus Integration
 // ============================================================

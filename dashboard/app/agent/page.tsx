@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useSuiClient } from "@mysten/dapp-kit";
-import { Cpu, Key, ArrowUpRight, CheckCircle2, XCircle, AlertTriangle, Plus, Trash2, Search, Wallet } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { Cpu, Key, ArrowUpRight, CheckCircle2, XCircle, AlertTriangle, Plus, Trash2, Search, Wallet, Upload } from "lucide-react";
 import { vaultClient } from "../../lib/suivault";
 import { parseVaultError, mistToSui, suiToMist } from "../../../sdk/client";
 import type { Vault, VaultKey } from "../../../sdk/types";
@@ -16,13 +17,77 @@ interface ResolvedKey {
   ownerAddress?: string;
 }
 
+interface AgentStrategy {
+  slug: string;
+  title: string;
+  category: string;
+  defaultAmountSui: string;
+  description: string;
+  executionNote: string;
+}
+
+const FALLBACK_RECIPIENT = "0xdeeb000000000000000000000000000000000000000000000000000000000000";
+
+const AGENT_STRATEGIES: AgentStrategy[] = [
+  {
+    slug: "arbitrage",
+    title: "Arbitrage Swarm",
+    category: "DeFi Execution",
+    defaultAmountSui: "0.02",
+    description: "Runs a small policy-checked spend to the vault's first whitelisted DeFi target.",
+    executionNote: "Uses the first whitelisted recipient when available, so the transaction should pass unless another policy limit blocks it.",
+  },
+  {
+    slug: "meme",
+    title: "Meme Accumulator",
+    category: "Token Trading",
+    defaultAmountSui: "0.04",
+    description: "Tests a higher-volatility accumulation spend against transaction and daily limits.",
+    executionNote: "Uses the vault whitelist when present and a moderate amount so overspending rules can still protect the vault.",
+  },
+  {
+    slug: "sentiment",
+    title: "Sentiment Tracker",
+    category: "Social Intelligence",
+    defaultAmountSui: "0.01",
+    description: "Submits a low-value signal-driven spend intent through the AI Risk Guardian.",
+    executionNote: "Keeps amount intentionally small; this is useful for verifying whitelists and audit logging.",
+  },
+  {
+    slug: "liquidation",
+    title: "Liquidation Bot",
+    category: "Risk Management",
+    defaultAmountSui: "0.03",
+    description: "Executes a conservative liquidation-response spend while respecting freeze and expiry checks.",
+    executionNote: "If the selected vault is frozen or the key is expired, the UI prevents execution before signing.",
+  },
+];
+
+function getStrategy(slug?: string | null) {
+  return AGENT_STRATEGIES.find((strategy) => strategy.slug === slug) || null;
+}
+
+function recipientForStrategy(strategy: AgentStrategy, item: ResolvedKey) {
+  const policy = item.vault?.policy;
+  if (policy?.allowedRecipients?.length) {
+    return policy.allowedRecipients[0];
+  }
+  if (strategy.slug === "liquidation" && policy?.isDeepbookOnly && policy.deepbookPool) {
+    return policy.deepbookPool;
+  }
+  return FALLBACK_RECIPIENT;
+}
+
 export default function AgentView() {
+  const searchParams = useSearchParams();
   const { executeTransaction, isConnected, activeAddress, isMock } = useUnifiedExecutor();
   const suiClient = useSuiClient();
+  const requestedStrategy = getStrategy(searchParams.get("strategy"));
 
   const [resolvedKeys, setResolvedKeys] = useState<ResolvedKey[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeSpendKey, setActiveSpendKey] = useState<ResolvedKey | null>(null);
+  const [selectedStrategySlug, setSelectedStrategySlug] = useState(requestedStrategy?.slug || AGENT_STRATEGIES[0].slug);
 
   // Import Agent states
   const [importedAddresses, setImportedAddresses] = useState<string[]>([]);
@@ -38,6 +103,7 @@ export default function AgentView() {
   const [spendLoading, setSpendLoading] = useState(false);
   const [spendError, setSpendError] = useState("");
   const [spendSuccess, setSpendSuccess] = useState("");
+  const selectedStrategy = getStrategy(selectedStrategySlug) || AGENT_STRATEGIES[0];
 
   // Load imported addresses and keys from localStorage on mount
   useEffect(() => {
@@ -122,6 +188,10 @@ export default function AgentView() {
               name: "Mock Trading Vault",
               owner: activeAddress || "0xmock_owner",
               balance: 100_000_000_000n, // 100 SUI
+              totalSpent: 0n,
+              todaySpent: 0n,
+              lastResetMs: Date.now(),
+              createdAtMs: Date.now(),
               isFrozen: false,
               agentKeyId: "0xmock_key_id_99281a",
               policy: {
@@ -157,6 +227,18 @@ export default function AgentView() {
   useEffect(() => {
     loadAgentKeys();
   }, [activeAddress, importedAddresses, importedKeyIds]);
+
+  useEffect(() => {
+    if (requestedStrategy) {
+      setSelectedStrategySlug(requestedStrategy.slug);
+    }
+  }, [requestedStrategy?.slug]);
+
+  useEffect(() => {
+    if (!activeSpendKey || !selectedStrategy) return;
+    setRecipient(recipientForStrategy(selectedStrategy, activeSpendKey));
+    setAmountSui(selectedStrategy.defaultAmountSui);
+  }, [activeSpendKey, selectedStrategySlug]);
 
   const handleImport = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -223,6 +305,67 @@ export default function AgentView() {
     }
   };
 
+  const handleManifestUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    setImportError("");
+    setImportSuccess("");
+    if (!file) return;
+
+    try {
+      const manifest = JSON.parse(await file.text());
+      const agentAddress = String(
+        manifest.agentAddress ||
+        manifest.agent_address ||
+        manifest.address ||
+        manifest.walletAddress ||
+        ""
+      ).trim();
+      const keyId = String(
+        manifest.vaultKeyId ||
+        manifest.vault_key_id ||
+        manifest.keyId ||
+        manifest.key_id ||
+        ""
+      ).trim();
+
+      if ((!agentAddress || !agentAddress.startsWith("0x")) && (!keyId || !keyId.startsWith("0x"))) {
+        setImportError("Manifest must include agentAddress/address or vaultKeyId/keyId beginning with 0x.");
+        return;
+      }
+
+      let nextAddresses = importedAddresses;
+      let nextKeyIds = importedKeyIds;
+      const added: string[] = [];
+
+      if (agentAddress && agentAddress.startsWith("0x") && !importedAddresses.includes(agentAddress)) {
+        nextAddresses = [...nextAddresses, agentAddress];
+        added.push("agent address");
+      }
+
+      if (keyId && keyId.startsWith("0x") && !importedKeyIds.includes(keyId)) {
+        setLoading(true);
+        const key = await vaultClient.getVaultKey(keyId);
+        setLoading(false);
+        if (!key) {
+          setImportError("Manifest VaultKey ID was not found on-chain. The address was not imported.");
+          return;
+        }
+        nextKeyIds = [...nextKeyIds, keyId];
+        added.push("VaultKey");
+      }
+
+      setImportedAddresses(nextAddresses);
+      setImportedKeyIds(nextKeyIds);
+      localStorage.setItem("suivault_tracked_agent_addresses", JSON.stringify(nextAddresses));
+      localStorage.setItem("suivault_tracked_key_ids", JSON.stringify(nextKeyIds));
+      setImportSuccess(added.length ? `Imported ${added.join(" and ")} from manifest.` : "Manifest entries were already tracked.");
+    } catch (err: any) {
+      setLoading(false);
+      setImportError(err.message || "Could not read agent manifest JSON.");
+    }
+  };
+
   const handleSpend = async () => {
     if (!activeSpendKey || !recipient || !amountSui) return;
     setSpendLoading(true);
@@ -230,6 +373,13 @@ export default function AgentView() {
     setSpendSuccess("");
 
     try {
+      if (!recipient.startsWith("0x") || recipient.length < 10) {
+        throw new Error("Recipient must be a valid Sui address beginning with 0x.");
+      }
+      if (!Number.isFinite(Number(amountSui)) || Number(amountSui) <= 0) {
+        throw new Error("Spend amount must be greater than 0 SUI.");
+      }
+
       const amountMist = suiToMist(Number(amountSui));
       const guardian = new AiRiskGuardian();
       
@@ -361,6 +511,53 @@ export default function AgentView() {
               "Connect a wallet or import agent details below to monitor spending limits and track policies."
             )}
           </p>
+        </div>
+      </div>
+
+      <div className="glass-panel" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "16px", flexWrap: "wrap" }}>
+          <div>
+            <h2 style={{ color: "#fff", fontSize: "1.1rem", fontWeight: 600, margin: "0 0 6px", display: "flex", alignItems: "center", gap: "8px" }}>
+              <Cpu size={18} color="var(--color-primary)" />
+              {selectedStrategy.title}
+            </h2>
+            <p style={{ color: "var(--text-secondary)", fontSize: "0.86rem", margin: 0, maxWidth: "720px", lineHeight: 1.6 }}>
+              {selectedStrategy.description}
+            </p>
+          </div>
+          <span className="badge" style={{ whiteSpace: "nowrap", background: "rgba(30, 106, 255, 0.12)", color: "var(--color-primary)", border: "1px solid rgba(30, 106, 255, 0.3)" }}>
+            {selectedStrategy.category}
+          </span>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px" }}>
+          {AGENT_STRATEGIES.map((strategy) => {
+            const active = strategy.slug === selectedStrategy.slug;
+            return (
+              <button
+                key={strategy.slug}
+                type="button"
+                onClick={() => setSelectedStrategySlug(strategy.slug)}
+                style={{
+                  minHeight: "58px",
+                  borderRadius: "8px",
+                  border: active ? "1px solid rgba(30, 106, 255, 0.55)" : "1px solid var(--border-light)",
+                  background: active ? "rgba(30, 106, 255, 0.12)" : "rgba(255,255,255,0.025)",
+                  color: active ? "#fff" : "var(--text-secondary)",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  padding: "10px 12px",
+                  fontFamily: "'Space Grotesk', sans-serif",
+                  transition: "all 0.2s ease",
+                }}
+              >
+                <span style={{ display: "block", fontSize: "0.9rem", fontWeight: 600 }}>{strategy.title}</span>
+                <span style={{ display: "block", fontSize: "0.72rem", color: active ? "#a3c4ff" : "var(--text-muted)", marginTop: "3px" }}>
+                  {strategy.defaultAmountSui} SUI intent
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -514,6 +711,37 @@ export default function AgentView() {
             <p style={{ color: "var(--text-secondary)", fontSize: "0.8rem", margin: 0 }}>
               Track agents by adding their wallet addresses or their specific VaultKey ID.
             </p>
+
+            <label
+              style={{
+                border: "1px dashed rgba(30, 106, 255, 0.35)",
+                background: "rgba(30, 106, 255, 0.04)",
+                borderRadius: "10px",
+                padding: "14px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "12px",
+                cursor: "pointer",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <Upload size={18} color="var(--color-primary)" />
+                <div>
+                  <div style={{ color: "#fff", fontSize: "0.88rem", fontWeight: 600 }}>Upload Agent Manifest</div>
+                  <div style={{ color: "var(--text-muted)", fontSize: "0.72rem" }}>JSON with agentAddress and optional vaultKeyId</div>
+                </div>
+              </div>
+              <span className="btn btn-secondary" style={{ padding: "7px 10px", fontSize: "0.76rem" }}>
+                Choose File
+              </span>
+              <input
+                type="file"
+                accept="application/json,.json"
+                onChange={handleManifestUpload}
+                style={{ display: "none" }}
+              />
+            </label>
 
             <div style={{ display: "flex", borderBottom: "1px solid var(--border-light)", gap: "12px", paddingBottom: "4px" }}>
               <button

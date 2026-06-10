@@ -588,7 +588,8 @@ public fun deposit<T>(
     vault: &mut Vault<T>,
     _cap: &VaultOwnerCap,
     coin: Coin<T>,
-    ctx: &TxContext,
+    clock: &Clock,
+    ctx: &mut TxContext,
 ) {
     assert!(_cap.vault_id == object::id(vault), ENotOwner);
 
@@ -602,6 +603,15 @@ public fun deposit<T>(
         new_balance: balance::value(&vault.balance),
         deposited_by: ctx.sender(),
     });
+
+    let audit_entry = audit::log_funds_deposited(
+        object::id(vault),
+        ctx.sender(),
+        amount,
+        clock.timestamp_ms(),
+        ctx,
+    );
+    transfer::public_share_object(audit_entry);
 }
 
 /// Owner withdraws funds from the vault
@@ -609,6 +619,7 @@ public fun withdraw<T>(
     vault: &mut Vault<T>,
     _cap: &VaultOwnerCap,
     amount: u64,
+    clock: &Clock,
     ctx: &mut TxContext,
 ) {
     assert!(_cap.vault_id == object::id(vault), ENotOwner);
@@ -623,6 +634,15 @@ public fun withdraw<T>(
         remaining_balance: balance::value(&vault.balance),
         withdrawn_by: ctx.sender(),
     });
+
+    let audit_entry = audit::log_funds_withdrawn(
+        object::id(vault),
+        ctx.sender(),
+        amount,
+        clock.timestamp_ms(),
+        ctx,
+    );
+    transfer::public_share_object(audit_entry);
 
     transfer::public_transfer(coin, ctx.sender());
 }
@@ -724,6 +744,8 @@ public fun update_policy<T>(
     deepbook_pool: address,
     max_price: u64,
     min_price: u64,
+    clock: &Clock,
+    ctx: &mut TxContext,
 ) {
     assert!(_cap.vault_id == object::id(vault), ENotOwner);
 
@@ -738,6 +760,14 @@ public fun update_policy<T>(
         max_price,
         min_price,
     );
+
+    let audit_entry = audit::log_policy_updated(
+        object::id(vault),
+        ctx.sender(),
+        clock.timestamp_ms(),
+        ctx,
+    );
+    transfer::public_share_object(audit_entry);
 }
 
 /// Owner issues a new VaultKey to a (possibly different) agent.

@@ -6,8 +6,29 @@ import { useSuiClient } from "@mysten/dapp-kit";
 import { Shield, ArrowRight, ArrowLeft, Sliders, Cpu, Plus, Trash2, CheckCircle2 } from "lucide-react";
 import { vaultClient } from "../../lib/suivault";
 import { parseVaultError, suiToMist } from "../../../sdk/client";
-import { PolicyPresets } from "../../../sdk/types";
+import { PolicyPresets, VAULT_TEMPLATES, type Vault } from "../../../sdk/types";
 import { useUnifiedExecutor } from "../../hooks/useUnifiedExecutor";
+
+const LOCAL_VAULTS_KEY = "suivault_local_created_vaults";
+type PresetId = (typeof VAULT_TEMPLATES)[number]["id"] | "deepbook" | "custom";
+
+function serializeVault(vault: Vault) {
+  return JSON.parse(JSON.stringify(vault, (_key, value) =>
+    typeof value === "bigint" ? value.toString() : value
+  ));
+}
+
+function saveLocalCreatedVault(vault: Vault) {
+  try {
+    const existing = JSON.parse(localStorage.getItem(LOCAL_VAULTS_KEY) || "[]");
+    const serialized = serializeVault(vault);
+    const next = [serialized, ...existing.filter((item: any) => item.id !== vault.id)].slice(0, 20);
+    localStorage.setItem(LOCAL_VAULTS_KEY, JSON.stringify(next));
+    window.dispatchEvent(new Event("suivault-local-vaults-update"));
+  } catch (e) {
+    console.error("Failed to save created vault snapshot:", e);
+  }
+}
 
 export default function CreateVault() {
   const { executeTransaction, isConnected, activeAddress, isMock } = useUnifiedExecutor();
@@ -29,7 +50,7 @@ export default function CreateVault() {
   const [customDurationMs, setCustomDurationMs] = useState("");
 
   // Step 3 State: Policy Details
-  const [preset, setPreset] = useState<"conservative" | "moderate" | "aggressive" | "deepbook" | "custom">("moderate");
+  const [preset, setPreset] = useState<PresetId>("payment-agent");
   const [maxPerTx, setMaxPerTx] = useState("0.1");
   const [maxPerDay, setMaxPerDay] = useState("0.5");
   const [activeHoursStart, setActiveHoursStart] = useState(0);
@@ -63,16 +84,14 @@ export default function CreateVault() {
   }, [activeAddress, suiClient]);
 
   // Apply Presets
-  const handlePresetSelect = (p: typeof preset) => {
+  const handlePresetSelect = (p: PresetId) => {
     setPreset(p);
     setErrorMsg("");
     let config;
-    if (p === "conservative") {
-      config = PolicyPresets.conservative(recipients);
-    } else if (p === "moderate") {
-      config = PolicyPresets.moderate(recipients);
-    } else if (p === "aggressive") {
-      config = PolicyPresets.aggressive();
+    const template = VAULT_TEMPLATES.find((item) => item.id === p);
+
+    if (template) {
+      config = template.policy;
     } else if (p === "deepbook") {
       config = PolicyPresets.deepbook(
         "0xdeeb000000000000000000000000000000000000000000000000000000000000",
@@ -95,7 +114,7 @@ export default function CreateVault() {
 
   // Run initial moderate preset on mount
   useEffect(() => {
-    handlePresetSelect("moderate");
+    handlePresetSelect("payment-agent");
   }, []);
 
   const handleAddRecipient = () => {
@@ -179,13 +198,61 @@ export default function CreateVault() {
         tx = new Transaction();
       }
 
-      await executeTransaction(tx as any, { description: "Create Agent Vault" });
+      const result = await executeTransaction(tx as any, { description: "Create Agent Vault" });
+
+      let createdVault: Vault | null = null;
+      if (!isMock && result.digest) {
+        try {
+          const txBlock = await suiClient.getTransactionBlock({
+            digest: result.digest,
+            options: { showObjectChanges: true },
+          });
+          const createdVaultChange = txBlock.objectChanges?.find((change: any) =>
+            change.type === "created" &&
+            typeof change.objectType === "string" &&
+            change.objectType.includes("::vault::Vault<")
+          ) as { objectId?: string } | undefined;
+          const createdVaultId = createdVaultChange?.objectId;
+
+          if (createdVaultId) {
+            createdVault = await vaultClient.getVault(createdVaultId);
+          }
+        } catch (e) {
+          console.error("Failed to resolve created vault object:", e);
+        }
+      }
+
+      const vaultSnapshot: Vault = createdVault || {
+        id: isMock ? `local-vault-${Date.now()}` : `pending-vault-${result.digest}`,
+        name,
+        owner: activeAddress!,
+        balance: suiToMist(Number(deposit)),
+        todaySpent: 0n,
+        totalSpent: 0n,
+        agentKeyId: null,
+        isFrozen: false,
+        createdAtMs: Date.now(),
+        lastResetMs: Date.now(),
+        policy: {
+          maxPerTx: suiToMist(Number(maxPerTx)),
+          maxPerDay: suiToMist(Number(maxPerDay)),
+          allowedRecipients: recipients,
+          activeHoursStart,
+          activeHoursEnd,
+          isDeepbookOnly,
+          deepbookPool: deepbookPool || "0x0000000000000000000000000000000000000000000000000000000000000000",
+          maxPrice: BigInt(maxPrice || 0),
+          minPrice: BigInt(minPrice || 0),
+        },
+      };
+
+      saveLocalCreatedVault(vaultSnapshot);
 
       setLoading(false);
-      setSuccessMsg("Vault and Agent Key created successfully!");
+      setSuccessMsg("Vault and Agent Key created successfully. Returning to dashboard...");
       setTimeout(() => {
         router.push("/");
-      }, 2000);
+      }, 800);
     } catch (e: any) {
       setLoading(false);
       setErrorMsg(e.message || "An error occurred during vault initialization");
@@ -201,7 +268,7 @@ export default function CreateVault() {
   }
 
   return (
-    <div style={{ maxWidth: "600px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "24px" }}>
+    <div style={{ width: "100%", maxWidth: "1120px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "24px" }}>
       <div>
         <h1 style={{ fontSize: "1.8rem", fontWeight: 700, color: "#fff", marginBottom: "4px" }}>
           Deploy New Agent Guardrail
@@ -285,9 +352,18 @@ export default function CreateVault() {
             <div>
               <label style={{ fontSize: "0.85rem", color: "var(--text-secondary)", display: "block", marginBottom: "8px" }}>Select Preset Template</label>
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                <button type="button" className={`btn ${preset === "conservative" ? "btn-primary" : "btn-secondary"}`} onClick={() => handlePresetSelect("conservative")} style={{ fontSize: "0.8rem", padding: "6px 12px" }}>🛡️ Conservative</button>
-                <button type="button" className={`btn ${preset === "moderate" ? "btn-primary" : "btn-secondary"}`} onClick={() => handlePresetSelect("moderate")} style={{ fontSize: "0.8rem", padding: "6px 12px" }}>📊 Moderate</button>
-                <button type="button" className={`btn ${preset === "aggressive" ? "btn-primary" : "btn-secondary"}`} onClick={() => handlePresetSelect("aggressive")} style={{ fontSize: "0.8rem", padding: "6px 12px" }}>🔥 Aggressive</button>
+                {VAULT_TEMPLATES.map((template) => (
+                  <button
+                    key={template.id}
+                    type="button"
+                    className={`btn ${preset === template.id ? "btn-primary" : "btn-secondary"}`}
+                    onClick={() => handlePresetSelect(template.id)}
+                    title={template.description}
+                    style={{ fontSize: "0.8rem", padding: "6px 12px" }}
+                  >
+                    {template.name}
+                  </button>
+                ))}
                 <button type="button" className={`btn ${preset === "deepbook" ? "btn-primary" : "btn-secondary"}`} onClick={() => handlePresetSelect("deepbook")} style={{ fontSize: "0.8rem", padding: "6px 12px", border: preset === "deepbook" ? "none" : "1px solid rgba(30, 106, 255, 0.4)", color: preset === "deepbook" ? "#fff" : "#a3c4ff" }}>📈 DeepBook</button>
                 <button type="button" className={`btn ${preset === "custom" ? "btn-primary" : "btn-secondary"}`} onClick={() => handlePresetSelect("custom")} style={{ fontSize: "0.8rem", padding: "6px 12px" }}>⚙️ Custom</button>
               </div>
