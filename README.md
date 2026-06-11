@@ -46,7 +46,7 @@ To ensure a seamless evaluation experience for hackathon judges and developers w
 
 ### 2. Bypassing Google/Twitch 401 Client ID Errors
 * If you click **Google** or **Twitch** sign-in, the app opens a beautiful, custom **Mock OAuth Portal** popup window.
-* Select one of the preset mock emails (e.g., `cyrusmogen123@gmail.com`) or enter your own custom username. The portal will simulate zkLogin proof generation, log you in instantly, and close itself.
+* Select one of the preset mock emails (e.g., `user123@gmail.com`) or enter your own custom username. The portal will simulate zkLogin proof generation, log you in instantly, and close itself.
 
 ### 3. Troubleshooting Wallet Signing/Password Errors
 * **The Problem:** In some environments, browser wallet extensions (such as Slush Wallet or Sui Wallet) can throw persistent "incorrect password" prompts or sign-and-execute failures during local testing.
