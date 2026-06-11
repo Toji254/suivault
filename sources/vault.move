@@ -34,6 +34,8 @@ const EKeyAlreadyIssued: u64 = 5;
 const ENoActiveKey: u64 = 6;
 /// Caller is not the authorized agent
 const ENotAgent: u64 = 7;
+/// VaultKey is no longer the vault's currently active key
+const EInactiveKey: u64 = 8;
 
 // ============================================================
 // One-Time Witness for Package Initialization
@@ -383,6 +385,7 @@ public fun spend<T>(
 
     // 2. Key must match this vault
     assert!(key.vault_id == vault_id, EKeyVaultMismatch);
+    assert_active_key(vault, key);
 
     // 3. Key must not be expired
     assert!(now_ms < key.expires_at_ms, EKeyExpired);
@@ -475,6 +478,7 @@ public fun spend_for_deepbook_order<T>(
     // --- Pre-checks ---
     assert!(!vault.is_frozen, EVaultFrozen);
     assert!(key.vault_id == vault_id, EKeyVaultMismatch);
+    assert_active_key(vault, key);
     assert!(now_ms < key.expires_at_ms, EKeyExpired);
     assert!(ctx.sender() == key.agent_address, ENotAgent);
 
@@ -564,6 +568,7 @@ public fun log_blocked_spend<T>(
     ctx: &mut TxContext,
 ) {
     assert!(key.vault_id == object::id(vault), EKeyVaultMismatch);
+    assert_active_key(vault, key);
     assert!(ctx.sender() == key.agent_address, ENotAgent);
 
     let audit_entry = audit::log_spend_blocked(
@@ -715,6 +720,37 @@ public fun revoke_key<T>(
     // Destroy the key
     let VaultKey { id, vault_id: _, agent_address: _, expires_at_ms: _, agent_name: _, issued_at_ms: _, reputation_score: _ } = key;
     object::delete(id);
+
+    event::emit(KeyRevoked {
+        vault_id: object::id(vault),
+        key_id,
+        revoked_by: ctx.sender(),
+    });
+
+    let audit_entry = audit::log_key_revoked(
+        object::id(vault),
+        ctx.sender(),
+        clock.timestamp_ms(),
+        ctx,
+    );
+    transfer::public_share_object(audit_entry);
+}
+
+/// Owner deactivates the currently registered agent key without requiring custody
+/// of the VaultKey object. This is the non-cooperative revocation path: any old
+/// key object may still exist in an agent wallet, but spend paths will reject it
+/// because it no longer matches vault.agent_key_id.
+public fun deactivate_key<T>(
+    vault: &mut Vault<T>,
+    _cap: &VaultOwnerCap,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    assert!(_cap.vault_id == object::id(vault), ENotOwner);
+    assert!(vault.agent_key_id.is_some(), ENoActiveKey);
+
+    let key_id = *vault.agent_key_id.borrow();
+    vault.agent_key_id = option::none();
 
     event::emit(KeyRevoked {
         vault_id: object::id(vault),
@@ -911,6 +947,12 @@ public fun cap_vault_id(cap: &VaultOwnerCap): ID {
 // ============================================================
 // Internal Functions
 // ============================================================
+
+/// Ensures the provided key is the key currently registered on the vault.
+fun assert_active_key<T>(vault: &Vault<T>, key: &VaultKey) {
+    assert!(vault.agent_key_id.is_some(), ENoActiveKey);
+    assert!(*vault.agent_key_id.borrow() == object::id(key), EInactiveKey);
+}
 
 /// Reset daily spending counter if a new day has started
 fun maybe_reset_daily<T>(vault: &mut Vault<T>, now_ms: u64) {

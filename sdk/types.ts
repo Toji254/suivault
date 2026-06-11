@@ -254,6 +254,7 @@ export enum VaultErrorCode {
   EKeyAlreadyIssued = 5,
   ENoActiveKey = 6,
   ENotAgent = 7,
+  EInactiveKey = 8,
 }
 
 export enum PolicyErrorCode {

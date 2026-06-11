@@ -9,6 +9,7 @@ import { parseVaultError, mistToSui, suiToMist } from "../../../sdk/client";
 import type { Vault, VaultKey } from "../../../sdk/types";
 import { useUnifiedExecutor } from "../../hooks/useUnifiedExecutor";
 import { AiRiskGuardian } from "../../../sdk/guardian";
+import { SUIVAULT_DEEPBOOK_TESTNET } from "../../../sdk/deepbook";
 
 interface ResolvedKey {
   key: VaultKey;
@@ -382,6 +383,7 @@ export default function AgentView() {
 
       const amountMist = suiToMist(Number(amountSui));
       const guardian = new AiRiskGuardian();
+      const deepbookPoolAddress = SUIVAULT_DEEPBOOK_TESTNET.pools.SUI_DBUSDC.address;
       
       let currentVault = activeSpendKey.vault;
       if (!currentVault && activeSpendKey.key.vaultId) {
@@ -416,11 +418,16 @@ export default function AgentView() {
         }
       };
 
+      const isDeepBookIntent = Boolean(evaluationVault.policy.isDeepbookOnly);
+      const deepbookLimitPrice = evaluationVault.policy.maxPrice > 0n ? evaluationVault.policy.maxPrice : 1_000_000_000n;
       const verdict = await guardian.evaluateSpend(
         evaluationVault,
         activeSpendKey.key,
         amountMist,
-        recipient
+        isDeepBookIntent ? deepbookPoolAddress : recipient,
+        isDeepBookIntent,
+        isDeepBookIntent ? deepbookPoolAddress : undefined,
+        isDeepBookIntent ? deepbookLimitPrice : undefined,
       );
 
       let tx;
@@ -455,7 +462,7 @@ export default function AgentView() {
         const check = await vaultClient.checkSpendWouldSucceed(
           activeSpendKey.key.vaultId,
           amountMist,
-          recipient
+          isDeepBookIntent ? deepbookPoolAddress : recipient
         );
 
         if (!check.ok) {
@@ -464,13 +471,25 @@ export default function AgentView() {
           return;
         }
 
-        tx = vaultClient.buildSpend(
-          activeSpendKey.key.vaultId,
-          activeSpendKey.key.id,
-          amountMist,
-          recipient,
-          verdict.walrusBlobId
-        );
+        tx = isDeepBookIntent
+          ? vaultClient.buildGuardedDeepBookSwap({
+              vaultId: activeSpendKey.key.vaultId,
+              keyId: activeSpendKey.key.id,
+              amount: amountMist,
+              poolKey: "SUI_DBUSDC",
+              limitPrice: deepbookLimitPrice,
+              minOut: 0n,
+              agentAddress: activeAddress || activeSpendKey.key.agentAddress,
+              recipient: activeAddress || activeSpendKey.key.agentAddress,
+              walrusBlobId: verdict.walrusBlobId,
+            })
+          : vaultClient.buildSpend(
+              activeSpendKey.key.vaultId,
+              activeSpendKey.key.id,
+              amountMist,
+              recipient,
+              verdict.walrusBlobId
+            );
       } else {
         const { Transaction } = await import("@mysten/sui/transactions");
         tx = new Transaction();

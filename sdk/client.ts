@@ -38,6 +38,7 @@ import type {
   VaultStats,
   AuditActionType,
 } from "./types.js";
+import { createDeepBookTestnetClient, getDeepBookPoolAddress, type SuiVaultDeepBookPoolKey } from "./deepbook.js";
 import {
   parseVault,
   parseVaultKey,
@@ -64,6 +65,23 @@ function checkActiveHours(start: number, end: number, currentHour: number): bool
   } else {
     return currentHour >= start || currentHour < end;
   }
+}
+
+export interface GuardedDeepBookSpendParams {
+  vaultId: string;
+  keyId: string;
+  amount: bigint;
+  poolKey?: SuiVaultDeepBookPoolKey | string;
+  limitPrice: bigint;
+  walrusBlobId?: string;
+}
+
+export interface GuardedDeepBookSwapParams extends GuardedDeepBookSpendParams {
+  agentAddress: string;
+  minOut: bigint;
+  deepAmount?: bigint;
+  recipient?: string;
+  direction?: "baseToQuote" | "quoteToBase";
 }
 
 // ============================================================
@@ -258,6 +276,22 @@ export class SuiVaultClient {
   }
 
   /**
+   * Build a transaction to deactivate the current agent key without needing the
+   * key object in the owner's wallet. This is the non-cooperative revocation path.
+   */
+  buildDeactivateKey(vaultId: string, capId: string): Transaction {
+    const tx = new Transaction();
+
+    tx.moveCall({
+      target: `${this.packageId}::vault::deactivate_key`,
+      typeArguments: [this.coinType],
+      arguments: [tx.object(vaultId), tx.object(capId), tx.object("0x6")],
+    });
+
+    return tx;
+  }
+
+  /**
    * Build a transaction to update the vault's spending policy.
    */
   buildUpdatePolicy(
@@ -319,6 +353,84 @@ export class SuiVaultClient {
       ],
     });
 
+    return tx;
+  }
+
+  /**
+   * Build a guarded DeepBook spend intent. This is the on-chain SuiVault guardrail
+   * primitive: the vault releases a Coin only after policy validates the target
+   * DeepBook pool and price envelope. Use buildGuardedDeepBookSwap for a full
+   * SuiVault -> DeepBook PTB swap.
+   */
+  buildGuardedDeepBookSpend(params: GuardedDeepBookSpendParams): Transaction {
+    const tx = new Transaction();
+    const poolKey = params.poolKey || "SUI_DBUSDC";
+    const poolAddress = getDeepBookPoolAddress(poolKey);
+
+    tx.moveCall({
+      target: `${this.packageId}::vault::spend_for_deepbook_order`,
+      typeArguments: [this.coinType],
+      arguments: [
+        tx.object(params.vaultId),
+        tx.object(params.keyId),
+        tx.pure.u64(params.amount),
+        tx.pure.address(poolAddress),
+        tx.pure.u64(params.limitPrice),
+        tx.object("0x6"),
+        tx.pure.string(params.walrusBlobId || ""),
+      ],
+    });
+
+    return tx;
+  }
+
+  /**
+   * Build a single programmable transaction block that:
+   * 1. withdraws a guarded Coin from SuiVault after Move policy validation, then
+   * 2. passes that Coin into the official DeepBook v3 testnet SDK swap call.
+   *
+   * The vault policy's deepbook_pool field must match the canonical DeepBook
+   * pool object address for poolKey (SUI_DBUSDC by default on testnet).
+   */
+  buildGuardedDeepBookSwap(params: GuardedDeepBookSwapParams): Transaction {
+    const tx = new Transaction();
+    const poolKey = params.poolKey || "SUI_DBUSDC";
+    const poolAddress = getDeepBookPoolAddress(poolKey);
+    const [guardedCoin] = tx.moveCall({
+      target: `${this.packageId}::vault::spend_for_deepbook_order`,
+      typeArguments: [this.coinType],
+      arguments: [
+        tx.object(params.vaultId),
+        tx.object(params.keyId),
+        tx.pure.u64(params.amount),
+        tx.pure.address(poolAddress),
+        tx.pure.u64(params.limitPrice),
+        tx.object("0x6"),
+        tx.pure.string(params.walrusBlobId || ""),
+      ],
+    });
+
+    const deepbook = createDeepBookTestnetClient(this.client as any, params.agentAddress);
+    const swap = params.direction === "quoteToBase"
+      ? deepbook.deepBook.swapExactQuoteForBase({
+          poolKey,
+          amount: params.amount,
+          deepAmount: params.deepAmount ?? 0n,
+          minOut: params.minOut,
+          quoteCoin: guardedCoin,
+        })
+      : deepbook.deepBook.swapExactBaseForQuote({
+          poolKey,
+          amount: params.amount,
+          deepAmount: params.deepAmount ?? 0n,
+          minOut: params.minOut,
+          baseCoin: guardedCoin,
+        });
+
+    const outputs = swap(tx);
+    if (params.recipient) {
+      tx.transferObjects([...outputs], tx.pure.address(params.recipient));
+    }
     return tx;
   }
 
@@ -766,6 +878,7 @@ export function parseVaultError(errorCode: number): string {
     5: "A key is already issued for this vault",
     6: "No active key to revoke",
     7: "Caller is not the authorized agent",
+    8: "VaultKey is no longer the active key for this vault",
     100: "Amount exceeds per-transaction limit",
     101: "Amount would exceed daily spending limit",
     102: "Recipient is not whitelisted",

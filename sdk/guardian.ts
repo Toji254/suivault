@@ -1,4 +1,5 @@
 import type { Vault, VaultKey } from "./types.js";
+import { WalrusAuditClient } from "./walrus.js";
 
 export interface RiskFactor {
   name: string;
@@ -37,6 +38,12 @@ export interface GuardianVerdict {
 }
 
 export class AiRiskGuardian {
+  private walrus: WalrusAuditClient;
+
+  constructor(walrus: WalrusAuditClient = new WalrusAuditClient()) {
+    this.walrus = walrus;
+  }
+
   /**
    * Evaluates the spend request against vault policy and dynamic risk factors.
    * Simulates uploading the rich audit log JSON to Walrus.
@@ -147,34 +154,8 @@ export class AiRiskGuardian {
       explanation,
     };
 
-    const payloadStr = JSON.stringify(payload);
-    let walrusBlobId = "walrus-blob-" + this.simpleHash(payloadStr);
-
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000); // 4 seconds timeout
-      
-      const res = await fetch("https://publisher.walrus-testnet.walrus.space/v1/blobs?epochs=5", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: payloadStr,
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-
-      if (res.ok) {
-        const uploadInfo = await res.json();
-        if (uploadInfo.newlyCreated?.blobObject?.blobId) {
-          walrusBlobId = uploadInfo.newlyCreated.blobObject.blobId;
-        } else if (uploadInfo.alreadyCertified?.blobId) {
-          walrusBlobId = uploadInfo.alreadyCertified.blobId;
-        }
-      }
-    } catch (e) {
-      console.warn("Walrus publisher upload failed, using fallback hash:", e);
-    }
+    const uploadResult = await this.walrus.storeJson(payload);
+    const walrusBlobId = uploadResult.blobId;
 
     return {
       allowed,
@@ -183,15 +164,5 @@ export class AiRiskGuardian {
       walrusBlobId,
       payload,
     };
-  }
-
-  private simpleHash(str: string): string {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash |= 0; // Convert to 32bit integer
-    }
-    return Math.abs(hash).toString(16).padStart(8, "0");
   }
 }

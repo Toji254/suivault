@@ -58,7 +58,7 @@ export function useUnifiedExecutor() {
       description?: string; // Action description
     }
   ): Promise<UnifiedExecutionResult> => {
-    const useSponsorship = options?.useSponsorship ?? true; // Default to sponsored for zkLogin
+    const useSponsorship = options?.useSponsorship ?? false; // Default to user-funded zkLogin; Enoki sponsorship requires server/app policy setup
     const waitForEffects = options?.waitForEffects ?? true;
     const description = options?.description || "Sui Transaction";
 

@@ -360,7 +360,7 @@ export default function VaultDetail() {
 
   const handleRevokeKey = async () => {
     if (!vault?.agentKeyId) return;
-    if (!confirm("Are you sure you want to revoke the active agent's key?")) return;
+    if (!confirm("Deactivate the active agent key? This immediately disables spending even if the agent still holds the old key object.")) return;
     setLoading(true);
     try {
       if (vaultId.startsWith("demo-vault-")) {
@@ -373,7 +373,7 @@ export default function VaultDetail() {
 
       let tx;
       if (!isMock) {
-        tx = vaultClient.buildRevokeKey(vaultId, capId, vault.agentKeyId);
+        tx = vaultClient.buildDeactivateKey(vaultId, capId);
       } else {
         const { Transaction } = await import("@mysten/sui/transactions");
         tx = new Transaction();

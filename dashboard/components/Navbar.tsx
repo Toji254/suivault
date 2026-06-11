@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ConnectButton } from "@mysten/dapp-kit";
-import { Shield, Wallet, ShieldAlert, Cpu, LogOut, History, ExternalLink, Copy, Check, Trash2, Clock, Sparkles } from "lucide-react";
+import { Shield, Wallet, ShieldAlert, Cpu, LogOut, History, ExternalLink, Copy, Check, Trash2, Clock } from "lucide-react";
 import { useEnokiFlow, useZkLogin } from "@mysten/enoki/react";
 import { ZkLoginModal } from "./ZkLoginModal";
 
@@ -354,7 +354,6 @@ export function Navbar() {
     { href: "/", label: "Vaults", icon: Wallet },
     { href: "/create", label: "Create Vault", icon: ShieldAlert },
     { href: "/agent", label: "Agent Keys", icon: Cpu },
-    { href: "/welcome", label: "Showcase", icon: Sparkles },
   ];
 
   return (

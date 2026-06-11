@@ -9,7 +9,8 @@
     "test": "vitest"
   },
   "dependencies": {
-    "@mysten/sui": "^1.0.0",
+    "@mysten/deepbook-v3": "^1.4.1",
+    "@mysten/sui": "^1.45.2",
     "typescript": "^5.0.0"
   },
   "devDependencies": {

@@ -17,6 +17,7 @@ const OWNER: address = @0xA;
 const AGENT: address = @0xB;
 const RECIPIENT: address = @0xC;
 const RANDOM_ADDR: address = @0xD;
+const SECOND_AGENT: address = @0xE;
 
 // 1 SUI = 1_000_000_000 MIST
 const ONE_SUI: u64 = 1_000_000_000;
@@ -692,6 +693,114 @@ fun test_daily_reset() {
         assert!(vault::total_spent(&vault) == 14 * ONE_SUI);
 
         test_scenario::return_to_sender(&scenario, key);
+        test_scenario::return_shared(vault);
+    };
+
+    test_clock.destroy_for_testing();
+    test_scenario::end(scenario);
+}
+
+// ============================================================
+// Test: Owner can deactivate a non-cooperative agent key
+// ============================================================
+
+#[test, expected_failure(abort_code = vault::ENoActiveKey)]
+fun test_owner_deactivates_key_without_agent_cooperation() {
+    let mut scenario = test_scenario::begin(OWNER);
+    let test_clock = setup_vault(&mut scenario);
+
+    // Owner deactivates the active key without needing to possess the agent's key object.
+    test_scenario::next_tx(&mut scenario, OWNER);
+    {
+        let mut vault = test_scenario::take_shared<Vault<SUI>>(&scenario);
+        let cap = test_scenario::take_from_sender<VaultOwnerCap>(&scenario);
+
+        vault::deactivate_key<SUI>(&mut vault, &cap, &test_clock, test_scenario::ctx(&mut scenario));
+        assert!(vault::has_active_key(&vault) == false);
+
+        test_scenario::return_to_sender(&scenario, cap);
+        test_scenario::return_shared(vault);
+    };
+
+    // The agent still holds the old key, but the vault no longer honors it.
+    test_scenario::next_tx(&mut scenario, AGENT);
+    {
+        let mut vault = test_scenario::take_shared<Vault<SUI>>(&scenario);
+        let mut key = test_scenario::take_from_sender<VaultKey>(&scenario);
+
+        vault::spend_to<SUI>(
+            &mut vault,
+            &mut key,
+            ONE_SUI,
+            RECIPIENT,
+            &test_clock,
+            string::utf8(b""),
+            test_scenario::ctx(&mut scenario),
+        );
+
+        test_scenario::return_to_sender(&scenario, key);
+        test_scenario::return_shared(vault);
+    };
+
+    test_clock.destroy_for_testing();
+    test_scenario::end(scenario);
+}
+
+// ============================================================
+// Test: Old key cannot spend after reissue
+// ============================================================
+
+#[test, expected_failure(abort_code = vault::EInactiveKey)]
+fun test_old_key_cannot_spend_after_key_reissue() {
+    let mut scenario = test_scenario::begin(OWNER);
+    let test_clock = setup_vault(&mut scenario);
+
+    // Move the first key to RANDOM_ADDR so we can keep it around after deactivation.
+    test_scenario::next_tx(&mut scenario, AGENT);
+    {
+        let key = test_scenario::take_from_sender<VaultKey>(&scenario);
+        transfer::public_transfer(key, RANDOM_ADDR);
+    };
+
+    // Owner deactivates the active key and issues a new key to SECOND_AGENT.
+    test_scenario::next_tx(&mut scenario, OWNER);
+    {
+        let mut vault = test_scenario::take_shared<Vault<SUI>>(&scenario);
+        let cap = test_scenario::take_from_sender<VaultOwnerCap>(&scenario);
+
+        vault::deactivate_key<SUI>(&mut vault, &cap, &test_clock, test_scenario::ctx(&mut scenario));
+        let new_key = vault::issue_new_key<SUI>(
+            &mut vault,
+            &cap,
+            SECOND_AGENT,
+            string::utf8(b"Second Agent"),
+            SEVEN_DAYS_MS,
+            &test_clock,
+            test_scenario::ctx(&mut scenario),
+        );
+        transfer::public_transfer(new_key, SECOND_AGENT);
+
+        test_scenario::return_to_sender(&scenario, cap);
+        test_scenario::return_shared(vault);
+    };
+
+    // RANDOM_ADDR holds the old key object, but it must no longer be accepted.
+    test_scenario::next_tx(&mut scenario, RANDOM_ADDR);
+    {
+        let mut vault = test_scenario::take_shared<Vault<SUI>>(&scenario);
+        let mut old_key = test_scenario::take_from_sender<VaultKey>(&scenario);
+
+        vault::spend_to<SUI>(
+            &mut vault,
+            &mut old_key,
+            ONE_SUI,
+            RECIPIENT,
+            &test_clock,
+            string::utf8(b""),
+            test_scenario::ctx(&mut scenario),
+        );
+
+        test_scenario::return_to_sender(&scenario, old_key);
         test_scenario::return_shared(vault);
     };
 

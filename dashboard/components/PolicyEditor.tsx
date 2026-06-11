@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Sliders, Clock, Plus, Trash2, Save, Cpu } from "lucide-react";
 import { vaultClient } from "../lib/suivault";
 import { parseVaultError, suiToMist, mistToSui } from "../../sdk/client";
+import { SUIVAULT_DEEPBOOK_TESTNET } from "../../sdk/deepbook";
 import { PolicyPresets } from "../../sdk/types";
 import type { Vault } from "../../sdk/types";
 import { useUnifiedExecutor } from "../hooks/useUnifiedExecutor";
@@ -63,9 +64,9 @@ export function PolicyEditor({ vault, capId, onPolicyUpdated }: PolicyEditorProp
       config = PolicyPresets.aggressive();
     } else if (presetName === "deepbook") {
       config = PolicyPresets.deepbook(
-        "0xdeeb000000000000000000000000000000000000000000000000000000000000",
-        BigInt(100),
-        BigInt(10)
+        SUIVAULT_DEEPBOOK_TESTNET.pools.SUI_DBUSDC.address,
+        BigInt(1_000_000_000),
+        BigInt(1)
       );
     } else {
       config = PolicyPresets.unlimited();

@@ -1,6 +1,6 @@
 # SuiVault — On-Chain Financial Guardrails for AI Agents on Sui
 
-SuiVault is an on-chain agent wallet protocol designed to provide secure, policy-enforced financial guardrails for autonomous AI agents. It protects human capital by enforcing spending limits, allowed recipient whitelists, operational hour limits, and emergency kill switches directly on-chain.
+SuiVault is an on-chain agent wallet protocol designed to provide secure, policy-enforced financial guardrails for autonomous AI agents. It protects human capital by enforcing spending limits, allowed recipient whitelists, operational hour limits, active-key revocation, DeepBook testnet pool/price constraints, Walrus-linked audit logs, and emergency kill switches directly on-chain.
 
 ## Project Structure
 
@@ -8,6 +8,16 @@ SuiVault is an on-chain agent wallet protocol designed to provide secure, policy
 - **`sdk/`**: TypeScript SDK client for building transactions and querying vault states.
 - **`dashboard/`**: Next.js dashboard/administration console for configuring rules and managing vaults.
 - **`demo/`**: Node.js scripts for running local agent simulations.
+
+## Overflow 2026 Track Fit
+
+SuiVault is built to compete across three Sui Overflow 2026 tracks:
+
+- **Agentic Web**: AI agents receive scoped `VaultKey` objects instead of unrestricted wallets; Move enforces every spend.
+- **DeepBook**: DeepBook-only vault policies target the canonical testnet SUI/DBUSDC pool through `@mysten/deepbook-v3`, and the SDK exposes a guarded SuiVault → DeepBook transaction builder.
+- **Walrus**: AI risk decisions and extended audit payloads are stored through the Walrus testnet publisher and referenced by blob ID in SuiVault audit flows.
+
+See `HACKATHON_SUBMISSION.md` for the judging strategy, demo flow, and submission checklist.
 
 ---
 
