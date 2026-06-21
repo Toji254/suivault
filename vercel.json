@@ -1,3 +1,4 @@
 {
-  "rootDirectory": "dashboard"
+  "rootDirectory": "dashboard",
+  "installCommand": "npm install --legacy-peer-deps"
 }
