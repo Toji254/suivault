@@ -2,7 +2,8 @@
   "name": "suivault",
   "private": true,
   "workspaces": [
-    "dashboard"
+    "dashboard",
+    "sdk"
   ],
   "scripts": {
     "build": "npm --prefix dashboard run build",
