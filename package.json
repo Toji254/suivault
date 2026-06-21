@@ -1,0 +1,12 @@
+{
+  "name": "suivault",
+  "private": true,
+  "workspaces": [
+    "dashboard"
+  ],
+  "scripts": {
+    "build": "npm --prefix dashboard run build",
+    "dev": "npm --prefix dashboard run dev",
+    "start": "npm --prefix dashboard run start"
+  }
+}
