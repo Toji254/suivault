@@ -32,3 +32,20 @@ Thumbs.db
 # Misc
 .vscode/
 tsconfig.tsbuildinfo
+
+# Local agent/demo runtime state and generated analysis
+.aider.chat.history.md
+graphify-out/
+__pycache__/
+*.pyc
+*.tsbuildinfo
+.agent-status.json
+.agent-events.json
+data/agent-state.json
+
+# Local Sui demo configs may contain private keys; never commit them
+demo/demo-config.json
+demo/glass-agent-config.json
+demo/active-position.json
+demo/.agent-status.json
+demo/.agent-events.json

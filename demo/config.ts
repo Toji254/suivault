@@ -23,7 +23,7 @@ if (existsSync(CONFIG_FILE_PATH)) {
 }
 
 export const CONFIG = {
-  packageId: "0x76e4f4311ea9c7cafeb45ad5817e784887e7021ac4595b3e6baf514cf3e725b9", // Owner replaces this with deployed package ID
+  packageId: "0xb1681ec32499ffc90c30d21bc7ffe8d3b160572cd25440e0ed0288a4f31bd98b", // Owner replaces this with deployed package ID
   network: "testnet" as const,
   ...dynamicConfig,
 };

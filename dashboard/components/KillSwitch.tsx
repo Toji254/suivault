@@ -19,10 +19,25 @@ export function KillSwitch({ vaultId, capId, isFrozen, onStateChange }: KillSwit
   const [errorMsg, setErrorMsg] = useState("");
   const { executeTransaction } = useUnifiedExecutor();
 
+  const isNonDemoWithoutCap = !vaultId.startsWith("demo-vault-") && !capId;
+
   const handleAction = async () => {
     setLoading(true);
     setErrorMsg("");
     try {
+      if (isNonDemoWithoutCap) {
+        throw new Error("Vault Owner Capability not found. Only the vault owner can freeze/unfreeze.");
+      }
+
+      if (vaultId.startsWith("demo-vault-")) {
+        // Demo: simulate the freeze/unfreeze locally
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        setLoading(false);
+        setShowConfirm(false);
+        onStateChange();
+        return;
+      }
+
       const tx = isFrozen 
         ? vaultClient.buildUnfreezeVault(vaultId, capId)
         : vaultClient.buildFreezeVault(vaultId, capId);
@@ -99,7 +114,8 @@ export function KillSwitch({ vaultId, capId, isFrozen, onStateChange }: KillSwit
         <button 
           className={isFrozen ? "btn btn-success" : "btn btn-danger"} 
           onClick={() => setShowConfirm(true)}
-          style={{ width: "100%", padding: "12px", fontWeight: 600 }}
+          disabled={isNonDemoWithoutCap}
+          style={isNonDemoWithoutCap ? { width: "100%", padding: "12px", fontWeight: 600, opacity: 0.5, cursor: "not-allowed" } : { width: "100%", padding: "12px", fontWeight: 600 }}
         >
           {isFrozen ? "☀️  Resume Agent Trading" : "❄️  FREEZE VAULT NOW"}
         </button>

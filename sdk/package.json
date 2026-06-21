@@ -10,10 +10,11 @@
   },
   "dependencies": {
     "@mysten/deepbook-v3": "^1.4.1",
-    "@mysten/sui": "^1.45.2",
+    "@mysten/sui": "^2.18.0",
     "typescript": "^5.0.0"
   },
   "devDependencies": {
+    "@types/node": "^25.9.3",
     "vitest": "^1.0.0"
   }
 }

@@ -33,7 +33,7 @@ export class WalrusAuditClient {
   }
 
   async storeJson(payload: unknown): Promise<WalrusStoreResult> {
-    const body = JSON.stringify(payload);
+    const body = JSON.stringify(payload, bigintReplacer);
     const fallbackId = `local-walrus-proof-${await deterministicHash(body)}`;
 
     try {
@@ -130,6 +130,15 @@ async function deterministicHash(input: string): Promise<string> {
     hash = Math.imul(31, hash) + input.charCodeAt(i) | 0;
   }
   return Math.abs(hash).toString(16).padStart(8, "0");
+}
+
+/**
+ * JSON.stringify replacer that serializes BigInt values as their decimal
+ * string form (matching Sui Move's on-chain integer encoding convention).
+ */
+function bigintReplacer(_key: string, value: unknown): unknown {
+  if (typeof value === "bigint") return value.toString();
+  return value;
 }
 
 async function safeText(res: Response): Promise<string> {

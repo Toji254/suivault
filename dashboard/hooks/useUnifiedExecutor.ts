@@ -1,13 +1,30 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useCurrentAccount, useSignAndExecuteTransaction, useSuiClient } from "@mysten/dapp-kit";
 import { useEnokiFlow, useZkLogin } from "@mysten/enoki/react";
 import { Transaction } from "@mysten/sui/transactions";
 
+const TX_CONFIRMATION_TIMEOUT_MS = 60_000;
+
 export interface UnifiedExecutionResult {
   digest: string;
   confirmed: boolean;
+}
+
+/**
+ * Wraps a promise with a timeout. If the promise doesn't resolve/reject
+ * within `ms` milliseconds, it rejects with a timeout error.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s. The transaction may still be processing — check your wallet or explorer.`));
+    }, ms);
+    promise
+      .then((val) => { clearTimeout(timer); resolve(val); })
+      .catch((err) => { clearTimeout(timer); reject(err); });
+  });
 }
 
 export function useUnifiedExecutor() {
@@ -38,29 +55,49 @@ export function useUnifiedExecutor() {
     return () => window.removeEventListener("zklogin-auth-change", syncZkUser);
   }, []);
 
+  // ── Priority: Wallet extension > zkLogin > localStorage zkUser ──
+  // If a wallet extension is connected, use that for all operations.
+  // Only fall back to zkLogin/Enoki when there is NO wallet connected.
+  const hasWalletExtension = !!account?.address;
+  const hasZkLogin = !!(zkLogin.address || zkUser?.address);
+
   const activeAddress = account?.address || zkLogin.address || zkUser?.address || null;
   const isConnected = !!activeAddress;
-  const isZkLogin = !!(zkLogin.address || zkUser?.address);
+  // Only treat as zkLogin if there is NO wallet extension connected
+  const isZkLogin = !hasWalletExtension && hasZkLogin;
+  // Kept for vault owner actions restored from the GitHub version.
+  // Real wallet connections still take priority; this only flags old sandbox zkLogin state.
   const isMock = !!zkUser?.isMock;
 
   /**
-   * Executes a transaction block using either the connected wallet extension,
-   * a real zkLogin (Enoki) session, or a simulated sandbox zkLogin session.
-   * 
-   * @param tx The Transaction block to sign and execute.
-   * @param options Execution configuration options.
+   * Executes a transaction block using either the connected wallet extension
+   * or a real zkLogin (Enoki) session. All transactions go to real Sui testnet.
+   *
+   * Priority order:
+   *   1. Wallet extension (Sui Wallet, Slush, etc.)
+   *   2. zkLogin via Enoki (Google/Twitch OAuth)
    */
-  const executeTransaction = async (
+  const executeTransaction = useCallback(async (
     tx: Transaction,
     options?: {
-      useSponsorship?: boolean; // For zkLogin: try gas-free execution via Enoki sponsor
-      waitForEffects?: boolean; // Wait for on-chain block validation
-      description?: string; // Action description
+      useSponsorship?: boolean;
+      waitForEffects?: boolean;
+      description?: string;
     }
   ): Promise<UnifiedExecutionResult> => {
-    const useSponsorship = options?.useSponsorship ?? false; // Default to user-funded zkLogin; Enoki sponsorship requires server/app policy setup
-    const waitForEffects = options?.waitForEffects ?? true;
+    const useSponsorship = options?.useSponsorship ?? true;
+    const waitForEffects = options?.waitForEffects ?? false;
     const description = options?.description || "Sui Transaction";
+
+    const confirmInBackground = (digest: string) => {
+      void withTimeout(
+        suiClient.waitForTransaction({ digest }),
+        TX_CONFIRMATION_TIMEOUT_MS,
+        "Transaction confirmation"
+      ).catch((err) => {
+        console.warn(`[SuiVault] Background confirmation check failed for ${digest}:`, err);
+      });
+    };
 
     const recordTx = (digest: string) => {
       try {
@@ -78,49 +115,67 @@ export function useUnifiedExecutor() {
       }
     };
 
-    const isDemoTx = isMock || !activeAddress || (typeof window !== "undefined" && window.location.pathname.includes("demo-vault"));
-
-    if (isDemoTx) {
-      // Simulated execution for demo showcases
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      // Generate a mock digest that links to a real transaction on testnet for explorer demonstration
-      const mockDigests = [
-        "2k5Kpxb5t5e7E2e5dE6e7g8h9iA1B2C3D4E5F6G7H8I9",
-        "3d745cfe3d72461aa2ddd86d3262253e994aceea1934",
-        "14b30ab064c54475a6856218fbdd9b37d2d4de68980"
-      ];
-      const digest = mockDigests[Math.floor(Math.random() * mockDigests.length)] || "0xmock_digest_" + Math.random().toString(36).substring(2, 12);
-      recordTx(digest);
-      return { 
-        digest, 
-        confirmed: true 
-      };
+    if (!activeAddress) {
+      throw new Error("No wallet connected. Please connect your Sui wallet or sign in with zkLogin to execute transactions on testnet.");
     }
 
-    // Case 1: zkLogin Connected (Real via Enoki or Mock)
-    if (isZkLogin) {
-      if (isMock) {
-        // Simulated execution for sandbox demo
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        const digest = "0xmock_digest_" + Math.random().toString(36).substring(2, 10);
-        recordTx(digest);
-        return { 
-          digest, 
-          confirmed: true 
-        };
-      }
-
+    // ─── Case 1: Wallet Extension (Sui Wallet, Slush, etc.) ───
+    // This takes priority over zkLogin — the user explicitly connected a wallet.
+    if (hasWalletExtension && account?.address) {
       try {
+        console.log(`[SuiVault] Executing via wallet extension: ${description}`);
+        // Wallet approval time is user-controlled, so don't fail the action just
+        // because the user spent more than 30s reviewing the prompt.
+        const result = await signAndExecuteWallet({ transaction: tx as any });
+        
+        if (waitForEffects) {
+          await withTimeout(
+            suiClient.waitForTransaction({ digest: result.digest }),
+            TX_CONFIRMATION_TIMEOUT_MS,
+            "Transaction confirmation"
+          );
+        } else {
+          confirmInBackground(result.digest);
+        }
+
+        recordTx(result.digest);
+        return { digest: result.digest, confirmed: true };
+      } catch (err: any) {
+        console.error("Wallet Transaction execution failed:", err);
+        if (err.message?.includes("rejected") || err.message?.includes("denied") || err.message?.includes("cancelled")) {
+          throw new Error("Transaction was rejected by the wallet. Please try again.");
+        }
+        throw new Error(err.message || "Transaction rejected or aborted by user.");
+      }
+    }
+
+    // ─── Case 2: zkLogin execution via Enoki ───
+    if (isZkLogin) {
+      try {
+        console.log(`[SuiVault] Executing via zkLogin/Enoki: ${description}`);
         let digest: string;
 
         if (useSponsorship) {
           // Sponsor and execute via Enoki service (gasless for user)
-          // The Enoki SDK uses `transactionBlock` naming from @mysten/sui.js
-          const result = await (enokiFlow as any).sponsorAndExecuteTransactionBlock({
-            network: "testnet",
-            transactionBlock: tx,
-            client: suiClient,
-          });
+          // Try the newer method name first, then fall back to the legacy one
+          const flow = enokiFlow as any;
+          const sponsorMethod = flow.sponsorAndExecuteTransaction
+            ?? flow.sponsorAndExecuteTransactionBlock;
+
+          if (!sponsorMethod) {
+            throw new Error("Enoki sponsorship method not found. Your Enoki SDK version may be incompatible.");
+          }
+
+          const result: any = await withTimeout(
+            sponsorMethod.call(flow, {
+              network: "testnet",
+              transaction: tx,
+              transactionBlock: tx, // backwards compatibility
+              client: suiClient,
+            }),
+            TX_CONFIRMATION_TIMEOUT_MS,
+            "Enoki sponsored transaction"
+          );
           digest = result.digest;
         } else {
           // User-funded: get the ephemeral keypair from the Enoki session
@@ -130,15 +185,32 @@ export function useUnifiedExecutor() {
           }
 
           // Use the keypair's own sign-and-execute method
-          const result = await (keypair as any).signAndExecuteTransaction({
-            transaction: tx,
-            client: suiClient,
-          });
+          const kp = keypair as any;
+          const signMethod = kp.signAndExecuteTransaction ?? kp.signAndExecuteTransactionBlock;
+          if (!signMethod) {
+            throw new Error("Keypair sign method not found. Your Enoki SDK version may be incompatible.");
+          }
+
+          const result: any = await withTimeout(
+            signMethod.call(kp, {
+              transaction: tx,
+              transactionBlock: tx,
+              client: suiClient,
+            }),
+            TX_CONFIRMATION_TIMEOUT_MS,
+            "zkLogin transaction"
+          );
           digest = result.digest;
         }
 
         if (waitForEffects) {
-          await suiClient.waitForTransaction({ digest });
+          await withTimeout(
+            suiClient.waitForTransaction({ digest }),
+            TX_CONFIRMATION_TIMEOUT_MS,
+            "Transaction confirmation"
+          );
+        } else {
+          confirmInBackground(digest);
         }
 
         recordTx(digest);
@@ -156,28 +228,9 @@ export function useUnifiedExecutor() {
       }
     }
 
-    // Case 2: Standard Wallet Connected (e.g., Sui Wallet, Slush, etc.)
-    if (account?.address) {
-      try {
-        const result = await signAndExecuteWallet({
-          transaction: tx as any,
-        });
-        
-        if (waitForEffects) {
-          await suiClient.waitForTransaction({ digest: result.digest });
-        }
-
-        recordTx(result.digest);
-        return { digest: result.digest, confirmed: true };
-      } catch (err: any) {
-        console.error("Wallet Transaction execution failed:", err);
-        throw new Error(err.message || "Transaction rejected or aborted by user.");
-      }
-    }
-
     // Case 3: No connected accounts
     throw new Error("No active session found. Please connect your wallet or sign in with Google/Twitch.");
-  };
+  }, [activeAddress, hasWalletExtension, isZkLogin, account, signAndExecuteWallet, enokiFlow, suiClient]);
 
   return {
     executeTransaction,
@@ -188,3 +241,4 @@ export function useUnifiedExecutor() {
     zkUser: isZkLogin ? (zkUser || { address: zkLogin.address, email: "enoki-connected@gmail.com" }) : null,
   };
 }
+

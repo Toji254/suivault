@@ -1,5 +1,5 @@
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
-import { SuiClient, getFullnodeUrl } from "@mysten/sui/client";
+import { SuiJsonRpcClient, getJsonRpcFullnodeUrl } from "@mysten/sui/jsonRpc";
 import { requestSuiFromFaucetV0, getFaucetHost } from "@mysten/sui/faucet";
 import { writeFileSync } from "fs";
 import { join } from "path";
@@ -14,7 +14,7 @@ async function main() {
     process.exit(1);
   }
 
-  const suiClient = new SuiClient({ url: getFullnodeUrl(CONFIG.network) });
+  const suiClient = new SuiJsonRpcClient({ url: getJsonRpcFullnodeUrl(CONFIG.network) });
   const vaultClient = new SuiVaultClient({
     packageId: CONFIG.packageId,
     network: CONFIG.network,

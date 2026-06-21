@@ -1,5 +1,5 @@
-import type { Vault, VaultKey } from "./types.js";
-import { WalrusAuditClient } from "./walrus.js";
+import type { Vault, VaultKey } from './types.js';
+import { WalrusAuditClient } from './walrus.js';
 
 export interface RiskFactor {
   name: string;
@@ -100,9 +100,10 @@ export class AiRiskGuardian {
 
     // Check 4: DeepBook price checks (if applicable)
     if (isDeepBook && pool && price !== undefined) {
-      const isCorrectPool = vault.policy.deepbookPool === pool;
-      const priceTooHigh = price > vault.policy.maxPrice;
-      const priceTooLow = price < vault.policy.minPrice;
+      const isCorrectPool = !vault.policy.isDeepbookOnly || vault.policy.deepbookPool === pool;
+      // Mirror on-chain logic: 0 means "no limit" (policy.move validate_deepbook_order)
+      const priceTooHigh = vault.policy.maxPrice > 0n && price > vault.policy.maxPrice;
+      const priceTooLow = vault.policy.minPrice > 0n && price < vault.policy.minPrice;
       
       factors.push({
         name: "deepbook_pool_valid",

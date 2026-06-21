@@ -37,6 +37,8 @@ export function PolicyEditor({ vault, capId, onPolicyUpdated }: PolicyEditorProp
 
   const { executeTransaction } = useUnifiedExecutor();
 
+  const isNonDemoWithoutCap = !vault.id.startsWith("demo-vault-") && !capId;
+
   const handleAddRecipient = () => {
     if (!newRecipient.startsWith("0x") || newRecipient.length < 10) {
       setErrorMsg("Invalid Sui address format");
@@ -83,13 +85,18 @@ export function PolicyEditor({ vault, capId, onPolicyUpdated }: PolicyEditorProp
   };
 
   const handleSave = async () => {
+    if (isNonDemoWithoutCap) {
+      setErrorMsg("Vault Owner Capability not found. Only the vault owner can update policies.");
+      return;
+    }
     setLoading(true);
     setErrorMsg("");
     setSuccessMsg("");
 
     if (vault.id.startsWith("demo-vault-")) {
       try {
-        await executeTransaction(null as any, { description: "Update Spending Policy" });
+        // Demo: update local state directly, no on-chain transaction
+        await new Promise((resolve) => setTimeout(resolve, 600));
         const updatedVault = {
           ...vault,
           policy: {
@@ -108,7 +115,7 @@ export function PolicyEditor({ vault, capId, onPolicyUpdated }: PolicyEditorProp
           typeof value === 'bigint' ? value.toString() : value
         ));
         setLoading(false);
-        setSuccessMsg("Spending policy successfully updated on-chain!");
+        setSuccessMsg("Spending policy successfully updated locally!");
         onPolicyUpdated();
         return;
       } catch (err: any) {
@@ -391,8 +398,8 @@ export function PolicyEditor({ vault, capId, onPolicyUpdated }: PolicyEditorProp
       <button 
         className="btn btn-primary" 
         onClick={handleSave} 
-        disabled={loading}
-        style={{ width: "100%", padding: "12px", marginTop: "8px" }}
+        disabled={loading || isNonDemoWithoutCap}
+        style={isNonDemoWithoutCap ? { width: "100%", padding: "12px", marginTop: "8px", opacity: 0.5, cursor: "not-allowed" } : { width: "100%", padding: "12px", marginTop: "8px" }}
       >
         <Save size={16} />
         {loading ? "Updating Policy..." : "Update Policy On-Chain"}

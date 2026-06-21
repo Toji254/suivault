@@ -18,6 +18,7 @@ import { ConnectButton } from "@mysten/dapp-kit";
 import gsap from "gsap";
 import { vaultClient } from "../lib/suivault";
 import { VaultCard } from "../components/VaultCard";
+import { AgentMonitor } from "../components/AgentMonitor";
 import type { Vault } from "../../sdk/types";
 import { useUnifiedExecutor } from "../hooks/useUnifiedExecutor";
 import AmberCascades from "../components/AmberCascades";
@@ -83,84 +84,11 @@ const AGENTS = [
   { slug: "liquidation", title: "Liquidation Bot", category: "Risk Management", year: "2026", image: "images/research-4.jpg" },
 ];
 
-const DEMO_VAULTS: Vault[] = [
-  {
-    id: "demo-vault-arbitrage",
-    name: "DeFi Arbitrage Agent Template",
-    owner: "0x142df8eaa1bfa7554bc9a71d9105f5a4b039e66ea5e55ea4b38bcb83cb684dc0",
-    balance: 450500000000n, // 450.5 SUI
-    todaySpent: 35000000000n, // 35 SUI
-    totalSpent: 1205000000000n, // 1205 SUI
-    agentKeyId: "demo-key-arbitrage",
-    isFrozen: false,
-    createdAtMs: Date.now() - 10 * 86400000,
-    lastResetMs: Date.now(),
-    policy: {
-      maxPerTx: 50000000000n,
-      maxPerDay: 100000000000n,
-      allowedRecipients: ["0xdeeb000000000000000000000000000000000000000000000000000000000000"],
-      activeHoursStart: 0,
-      activeHoursEnd: 0,
-      isDeepbookOnly: false,
-      deepbookPool: "0x0000000000000000000000000000000000000000000000000000000000000000",
-      maxPrice: 0n,
-      minPrice: 0n,
-    },
-  },
-  {
-    id: "demo-vault-meme",
-    name: "MEME Accumulator Bot Template",
-    owner: "0x142df8eaa1bfa7554bc9a71d9105f5a4b039e66ea5e55ea4b38bcb83cb684dc0",
-    balance: 120000000000n,
-    todaySpent: 10000000000n,
-    totalSpent: 540000000000n,
-    agentKeyId: "demo-key-meme",
-    isFrozen: false,
-    createdAtMs: Date.now() - 5 * 86400000,
-    lastResetMs: Date.now(),
-    policy: {
-      maxPerTx: 20000000000n,
-      maxPerDay: 50000000000n,
-      allowedRecipients: ["0xae00000000000000000000000000000000000000000000000000000000000000"],
-      activeHoursStart: 9,
-      activeHoursEnd: 17,
-      isDeepbookOnly: false,
-      deepbookPool: "0x0000000000000000000000000000000000000000000000000000000000000000",
-      maxPrice: 0n,
-      minPrice: 0n,
-    },
-  },
-  {
-    id: "demo-vault-liquidator",
-    name: "Liquidator Swarm Template",
-    owner: "0x142df8eaa1bfa7554bc9a71d9105f5a4b039e66ea5e55ea4b38bcb83cb684dc0",
-    balance: 2500000000000n,
-    todaySpent: 0n,
-    totalSpent: 15400000000000n,
-    agentKeyId: "demo-key-liquidator",
-    isFrozen: true,
-    createdAtMs: Date.now() - 30 * 86400000,
-    lastResetMs: Date.now(),
-    policy: {
-      maxPerTx: 250000000000n,
-      maxPerDay: 50000000000n,
-      allowedRecipients: [],
-      activeHoursStart: 0,
-      activeHoursEnd: 0,
-      isDeepbookOnly: true,
-      deepbookPool: "0x76e4f4311ea9c7cafeb45ad5817e784887e7021ac4595b3e6baf514cf3e725b9",
-      maxPrice: 12000000n,
-      minPrice: 8000000n,
-    },
-  },
-];
-
 export default function UnifiedHome() {
   const { isConnected, activeAddress } = useUnifiedExecutor();
   const [vaults, setVaults] = useState<Vault[]>([]);
   const [localVaults, setLocalVaults] = useState<Vault[]>([]);
   const [loading, setLoading] = useState(false);
-  const [demoVaults, setDemoVaults] = useState<Vault[]>(DEMO_VAULTS);
 
   // Landing Page Interactive States
   const [titleWidth, setTitleWidth] = useState<number>(0);
@@ -186,31 +114,7 @@ export default function UnifiedHome() {
     return () => window.removeEventListener("resize", measure);
   }, []);
 
-  // 2. Sync demo vaults local storage updates
-  useEffect(() => {
-    const loaded = DEMO_VAULTS.map(vault => {
-      const stored = localStorage.getItem(`demo-vault-${vault.id}`);
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          parsed.balance = BigInt(parsed.balance);
-          parsed.todaySpent = BigInt(parsed.todaySpent);
-          parsed.totalSpent = BigInt(parsed.totalSpent);
-          parsed.policy.maxPerTx = BigInt(parsed.policy.maxPerTx);
-          parsed.policy.maxPerDay = BigInt(parsed.policy.maxPerDay);
-          parsed.policy.maxPrice = BigInt(parsed.policy.maxPrice);
-          parsed.policy.minPrice = BigInt(parsed.policy.minPrice);
-          return parsed;
-        } catch (e) {
-          console.error("Failed to parse stored demo vault:", e);
-        }
-      }
-      return vault;
-    });
-    setDemoVaults(loaded);
-  }, []);
-
-  // 3. Load on-chain vaults for owner
+  // Load on-chain vaults for owner
   useEffect(() => {
     async function loadVaults() {
       if (!activeAddress) {
@@ -319,7 +223,7 @@ export default function UnifiedHome() {
       liveVaults.push(localVault);
     }
   }
-  const displayVaults = isConnected ? liveVaults : demoVaults;
+  const displayVaults = liveVaults;
 
   return (
     <div style={{ color: "#F0F4FF", minHeight: "100vh", marginTop: "-40px" }}>
@@ -539,6 +443,11 @@ export default function UnifiedHome() {
             <ConnectButton className="sui-connect-btn" style={{ scale: "0.9" }} />
           </div>
         )}
+
+        {/* Agent Activity Monitor — always visible so the demo reads as live. */}
+        <div style={{ marginBottom: "48px" }}>
+          <AgentMonitor />
+        </div>
 
         {loading ? (
           <div style={{ display: "flex", justifyContent: "center", padding: "80px 0" }}>

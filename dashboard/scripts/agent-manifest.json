@@ -1,0 +1,6 @@
+{
+  "name": "SuiVault Test Agent",
+  "agentAddress": "0x1c57d251713902f7c075954bea40115d3ae8c5fb0d418018ec80f019df01c993",
+  "description": "Autonomous trading agent for policy testing.",
+  "network": "testnet"
+}

@@ -31,7 +31,7 @@ function saveLocalCreatedVault(vault: Vault) {
 }
 
 export default function CreateVault() {
-  const { executeTransaction, isConnected, activeAddress, isMock } = useUnifiedExecutor();
+  const { executeTransaction, isConnected, activeAddress } = useUnifiedExecutor();
   const suiClient = useSuiClient();
   const router = useRouter();
 
@@ -165,43 +165,37 @@ export default function CreateVault() {
       let coinObjectId = "0x0000000000000000000000000000000000000000000000000000000000000000";
       let tx;
 
-      if (!isMock) {
-        // Find SUI coin object to spend
-        const coins = await suiClient.getCoins({ owner: activeAddress!, coinType: "0x2::sui::SUI" });
-        if (coins.data.length === 0) {
-          throw new Error("No SUI coins found in owner's wallet to fund deposit");
-        }
-        coinObjectId = coins.data[0].coinObjectId;
-
-        tx = vaultClient.buildCreateVault({
-          coinObjectId,
-          name,
-          agentAddress,
-          agentName,
-          keyDurationMs: getFinalDuration(),
-          policy: {
-            maxPerTx: suiToMist(Number(maxPerTx)),
-            maxPerDay: suiToMist(Number(maxPerDay)),
-            allowedRecipients: recipients,
-            activeHoursStart,
-            activeHoursEnd,
-            isDeepbookOnly,
-            deepbookPool: deepbookPool || "0x0000000000000000000000000000000000000000000000000000000000000000",
-            maxPrice: BigInt(maxPrice || 0),
-            minPrice: BigInt(minPrice || 0)
-          },
-          depositAmount: suiToMist(Number(deposit)),
-        });
-      } else {
-        // Simulated mock tx block
-        const { Transaction } = await import("@mysten/sui/transactions");
-        tx = new Transaction();
+      // Find SUI coin object to spend
+      const coins = await suiClient.getCoins({ owner: activeAddress!, coinType: "0x2::sui::SUI" });
+      if (coins.data.length === 0) {
+        throw new Error("No SUI coins found in owner's wallet to fund deposit");
       }
+      coinObjectId = coins.data[0].coinObjectId;
+
+      tx = vaultClient.buildCreateVault({
+        coinObjectId,
+        name,
+        agentAddress,
+        agentName,
+        keyDurationMs: getFinalDuration(),
+        policy: {
+          maxPerTx: suiToMist(Number(maxPerTx)),
+          maxPerDay: suiToMist(Number(maxPerDay)),
+          allowedRecipients: recipients,
+          activeHoursStart,
+          activeHoursEnd,
+          isDeepbookOnly,
+          deepbookPool: deepbookPool || "0x0000000000000000000000000000000000000000000000000000000000000000",
+          maxPrice: BigInt(maxPrice || 0),
+          minPrice: BigInt(minPrice || 0)
+        },
+        depositAmount: suiToMist(Number(deposit)),
+      });
 
       const result = await executeTransaction(tx as any, { description: "Create Agent Vault" });
 
       let createdVault: Vault | null = null;
-      if (!isMock && result.digest) {
+      if (result.digest) {
         try {
           const txBlock = await suiClient.getTransactionBlock({
             digest: result.digest,
@@ -223,7 +217,7 @@ export default function CreateVault() {
       }
 
       const vaultSnapshot: Vault = createdVault || {
-        id: isMock ? `local-vault-${Date.now()}` : `pending-vault-${result.digest}`,
+        id: `pending-vault-${result.digest}`,
         name,
         owner: activeAddress!,
         balance: suiToMist(Number(deposit)),

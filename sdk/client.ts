@@ -27,7 +27,8 @@
  */
 
 import { Transaction } from "@mysten/sui/transactions";
-import { SuiClient, getFullnodeUrl } from "@mysten/sui/client";
+import { SuiJsonRpcClient, getJsonRpcFullnodeUrl, type SuiClient } from './market-scout.js';
+export type { SuiClient } from './market-scout.js';
 import type {
   SuiVaultConfig,
   CreateVaultParams,
@@ -37,14 +38,14 @@ import type {
   AuditEntry,
   VaultStats,
   AuditActionType,
-} from "./types.js";
-import { createDeepBookTestnetClient, getDeepBookPoolAddress, type SuiVaultDeepBookPoolKey } from "./deepbook.js";
+} from './types.js';
+import { createDeepBookTestnetClient, getDeepBookPoolAddress, type SuiVaultDeepBookPoolKey } from './deepbook.js';
 import {
   parseVault,
   parseVaultKey,
   parseVaultOwnerCap,
   parseAuditEntry,
-} from "./parser.js";
+} from './parser.js';
 
 // ============================================================
 // Helper Constants & Utilities
@@ -96,8 +97,9 @@ export class SuiVaultClient {
   constructor(config: SuiVaultConfig) {
     this.packageId = config.packageId;
     this.coinType = "0x2::sui::SUI";
-    this.client = new SuiClient({
-      url: config.rpcUrl || getFullnodeUrl(config.network),
+    this.client = new SuiJsonRpcClient({
+      url: config.rpcUrl || getJsonRpcFullnodeUrl(config.network),
+      network: config.network,
     });
   }
 
@@ -728,31 +730,23 @@ export class SuiVaultClient {
 
   /**
    * Subscribe to real-time events for a vault.
+   *
+   * NOTE: The new @mysten/sui v2 JSON-RPC client dropped legacy `subscribeEvent`
+   * in favor of gRPC streaming (see `@mysten/sui/grpc`). We keep this method's
+   * signature so existing callers still compile, but log a warning and return
+   * a no-op unsubscribe. Polling-based consumers can use `queryEvents` instead.
    */
   async subscribeToVaultEvents(
     vaultId: string,
     callback: (event: any) => void
   ): Promise<() => void> {
-    try {
-      const unsubscribe = await this.client.subscribeEvent({
-        filter: {
-          Any: [
-            { MoveModule: { package: this.packageId, module: "vault" } },
-            { MoveModule: { package: this.packageId, module: "audit" } },
-          ],
-        },
-        onMessage: (event: any) => {
-          const json = event.parsedJson as any;
-          if (json && json.vault_id === vaultId) {
-            callback(event);
-          }
-        },
-      });
-      return unsubscribe;
-    } catch (e) {
-      console.error(`Error subscribing to events for vault ${vaultId}:`, e);
-      return () => {};
-    }
+    console.warn(
+      `subscribeToVaultEvents(${vaultId}) is a no-op: real-time event ` +
+        `streaming requires the gRPC client. Falling back to polling.`,
+    );
+    // Suppress unused-callback lint; callers can opt into polling themselves.
+    void callback;
+    return () => {};
   }
 
   // ============================================================

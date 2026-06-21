@@ -207,6 +207,10 @@ export interface AuditEntry {
   success: boolean;
   blockReason: string;
   walrusBlobId: string;
+  /** Transaction digest from the originating event (populated by SDK event queries) */
+  txDigest?: string;
+  /** Source of this entry: "event" if from event queries, "audit_object" if enriched from on-chain AuditEntry object */
+  source?: "event" | "audit_object";
 }
 
 export type AuditActionType =

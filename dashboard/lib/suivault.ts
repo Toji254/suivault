@@ -2,7 +2,7 @@ import { SuiVaultClient } from "../../sdk/index";
 
 // Owner must replace this package ID with their actual deployed package ID.
 export const SUIVAULT_CONFIG = {
-  packageId: "0x76e4f4311ea9c7cafeb45ad5817e784887e7021ac4595b3e6baf514cf3e725b9",
+  packageId: "0xb1681ec32499ffc90c30d21bc7ffe8d3b160572cd25440e0ed0288a4f31bd98b",
   network: "testnet" as const,
 };
 

@@ -277,11 +277,13 @@ public fun log_policy_updated(
 
 /// Attach a Walrus blob ID to an existing audit entry.
 /// This links the on-chain record to detailed off-chain logs stored on Walrus.
-/// Can only be called by the entry owner (the one who created it).
+/// Can only be called by the agent that originally triggered this audit entry.
 public fun attach_walrus_blob(
     entry: &mut AuditEntry,
     blob_id: String,
+    ctx: &TxContext,
 ) {
+    assert!(ctx.sender() == entry.agent_address, 7); // ENotAgent
     entry.walrus_blob_id = blob_id;
 }
 

@@ -17,6 +17,9 @@
     "guardian.ts",
     "walrus.ts",
     "deepbook.ts",
+    "market-scout.ts",
+    "agent-state.ts",
+    "probe-pool.ts",
     "index.ts"
   ]
 }

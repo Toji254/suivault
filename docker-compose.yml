@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    restart: always
+
+  # Optional: Demo Agent service
+  # To run: docker-compose run agent npm run agent
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /app/demo
+    volumes:
+      - .:/app
+    command: ["tail", "-f", "/dev/null"] # Keep container alive for manual execution

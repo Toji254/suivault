@@ -81,7 +81,7 @@ function recipientForStrategy(strategy: AgentStrategy, item: ResolvedKey) {
 
 export default function AgentView() {
   const searchParams = useSearchParams();
-  const { executeTransaction, isConnected, activeAddress, isMock } = useUnifiedExecutor();
+  const { executeTransaction, isConnected, activeAddress } = useUnifiedExecutor();
   const suiClient = useSuiClient();
   const requestedStrategy = getStrategy(searchParams.get("strategy"));
 
@@ -133,29 +133,15 @@ export default function AgentView() {
     try {
       const keysMap = new Map<string, ResolvedKey>();
 
-      // 1. Load keys owned by connected wallet
+      // Load keys owned by connected wallet (only real testnet)
       if (activeAddress) {
-        if (isMock) {
-          // Add a mock key in demo mode
-          const mockKey: VaultKey = {
-            id: "0xmock_key_id_99281a",
-            vaultId: "0xmock_vault_id_1192fa",
-            agentAddress: activeAddress,
-            agentName: "Mock Trading Bot",
-            expiresAtMs: Date.now() + 86400000 * 7,
-            issuedAtMs: Date.now(),
-            reputationScore: 0,
-          };
-          keysMap.set(mockKey.id, { key: mockKey, vault: null, source: "wallet" });
-        } else {
-          const primaryKeys = await vaultClient.getAgentKeys(activeAddress);
-          for (const k of primaryKeys) {
-            keysMap.set(k.id, { key: k, vault: null, source: "wallet" });
-          }
+        const primaryKeys = await vaultClient.getAgentKeys(activeAddress);
+        for (const k of primaryKeys) {
+          keysMap.set(k.id, { key: k, vault: null, source: "wallet" });
         }
       }
 
-      // 2. Load keys owned by imported addresses
+      // Load keys owned by imported addresses
       for (const addr of importedAddresses) {
         const addrKeys = await vaultClient.getAgentKeys(addr);
         for (const k of addrKeys) {
@@ -163,7 +149,7 @@ export default function AgentView() {
         }
       }
 
-      // 3. Load keys by imported Key IDs
+      // Load keys by imported Key IDs
       for (const keyId of importedKeyIds) {
         if (!keysMap.has(keyId)) {
           try {
@@ -179,39 +165,12 @@ export default function AgentView() {
 
       const keysList = Array.from(keysMap.values());
 
-      // 4. Resolve Vault structures
+      // Resolve Vault structures from testnet
       const resolved: ResolvedKey[] = [];
       for (const item of keysList) {
         try {
-          if (isMock && item.key.id.startsWith("0xmock")) {
-            const mockVault: Vault = {
-              id: "0xmock_vault_id_1192fa",
-              name: "Mock Trading Vault",
-              owner: activeAddress || "0xmock_owner",
-              balance: 100_000_000_000n, // 100 SUI
-              totalSpent: 0n,
-              todaySpent: 0n,
-              lastResetMs: Date.now(),
-              createdAtMs: Date.now(),
-              isFrozen: false,
-              agentKeyId: "0xmock_key_id_99281a",
-              policy: {
-                maxPerTx: 10_000_000_000n, // 10 SUI
-                maxPerDay: 50_000_000_000n, // 50 SUI
-                allowedRecipients: [],
-                activeHoursStart: 0,
-                activeHoursEnd: 0,
-                isDeepbookOnly: false,
-                deepbookPool: "0x0000000000000000000000000000000000000000000000000000000000000000",
-                maxPrice: 0n,
-                minPrice: 0n,
-              }
-            };
-            resolved.push({ ...item, vault: mockVault });
-          } else {
-            const v = await vaultClient.getVault(item.key.vaultId);
-            resolved.push({ ...item, vault: v });
-          }
+          const v = await vaultClient.getVault(item.key.vaultId);
+          resolved.push({ ...item, vault: v });
         } catch (e) {
           resolved.push(item);
         }
@@ -433,22 +392,18 @@ export default function AgentView() {
       let tx;
 
       if (!verdict.allowed) {
-        if (!isMock) {
-          try {
-            tx = vaultClient.buildLogBlockedSpend(
-              activeSpendKey.key.vaultId,
-              activeSpendKey.key.id,
-              amountMist,
-              recipient,
-              verdict.reason || "AI Risk Guardian blocked",
-              verdict.walrusBlobId
-            );
-            await executeTransaction(tx as any, { description: "Log Blocked Spend On-Chain" });
-          } catch (e: any) {
-            console.error("Failed to log blocked spend on-chain:", e);
-          }
-        } else {
-          await executeTransaction(null as any, { description: "Log Blocked Spend (AI Guardian)" });
+        try {
+          tx = vaultClient.buildLogBlockedSpend(
+            activeSpendKey.key.vaultId,
+            activeSpendKey.key.id,
+            amountMist,
+            recipient,
+            verdict.reason || "AI Risk Guardian blocked",
+            verdict.walrusBlobId
+          );
+          await executeTransaction(tx as any, { description: "Log Blocked Spend On-Chain" });
+        } catch (e: any) {
+          console.error("Failed to log blocked spend on-chain:", e);
         }
 
         setSpendLoading(false);
@@ -458,42 +413,37 @@ export default function AgentView() {
         return;
       }
 
-      if (!isMock) {
-        const check = await vaultClient.checkSpendWouldSucceed(
-          activeSpendKey.key.vaultId,
-          amountMist,
-          isDeepBookIntent ? deepbookPoolAddress : recipient
-        );
+      const check = await vaultClient.checkSpendWouldSucceed(
+        activeSpendKey.key.vaultId,
+        amountMist,
+        isDeepBookIntent ? deepbookPoolAddress : recipient
+      );
 
-        if (!check.ok) {
-          setSpendLoading(false);
-          setSpendError(`Pre-flight warning: ${check.reason}`);
-          return;
-        }
-
-        tx = isDeepBookIntent
-          ? vaultClient.buildGuardedDeepBookSwap({
-              vaultId: activeSpendKey.key.vaultId,
-              keyId: activeSpendKey.key.id,
-              amount: amountMist,
-              poolKey: "SUI_DBUSDC",
-              limitPrice: deepbookLimitPrice,
-              minOut: 0n,
-              agentAddress: activeAddress || activeSpendKey.key.agentAddress,
-              recipient: activeAddress || activeSpendKey.key.agentAddress,
-              walrusBlobId: verdict.walrusBlobId,
-            })
-          : vaultClient.buildSpend(
-              activeSpendKey.key.vaultId,
-              activeSpendKey.key.id,
-              amountMist,
-              recipient,
-              verdict.walrusBlobId
-            );
-      } else {
-        const { Transaction } = await import("@mysten/sui/transactions");
-        tx = new Transaction();
+      if (!check.ok) {
+        setSpendLoading(false);
+        setSpendError(`Pre-flight warning: ${check.reason}`);
+        return;
       }
+
+      tx = isDeepBookIntent
+        ? vaultClient.buildGuardedDeepBookSwap({
+            vaultId: activeSpendKey.key.vaultId,
+            keyId: activeSpendKey.key.id,
+            amount: amountMist,
+            poolKey: "SUI_DBUSDC",
+            limitPrice: deepbookLimitPrice,
+            minOut: 0n,
+            agentAddress: activeAddress || activeSpendKey.key.agentAddress,
+            recipient: activeAddress || activeSpendKey.key.agentAddress,
+            walrusBlobId: verdict.walrusBlobId,
+          })
+        : vaultClient.buildSpend(
+            activeSpendKey.key.vaultId,
+            activeSpendKey.key.id,
+            amountMist,
+            recipient,
+            verdict.walrusBlobId
+          );
 
       const res = await executeTransaction(tx as any, { description: "Agent Spend Transaction" });
       
