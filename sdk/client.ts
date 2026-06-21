@@ -26,7 +26,32 @@
  * ============================================================================
  */
 
-import { Transaction } from "@mysten/sui/transactions";
+
+export class Transaction {
+  pure = {
+    u64: (v: unknown) => v,
+    u8: (v: unknown) => v,
+    bool: (v: unknown) => v,
+    string: (v: unknown) => v,
+    address: (v: unknown) => v,
+    vector: (_type: string, v: unknown[]) => v,
+  };
+
+  object(id: string) {
+    return id;
+  }
+
+  splitCoins(coin: unknown, amounts: unknown[]) {
+    return [{ coin, amounts }];
+  }
+
+  moveCall(args: unknown) {
+    return [args];
+  }
+
+  transferObjects(_objects: unknown[], _recipient: unknown) {}
+}
+
 import { SuiJsonRpcClient, getJsonRpcFullnodeUrl, type SuiClient } from './market-scout.js';
 export type { SuiClient } from './market-scout.js';
 import type {
