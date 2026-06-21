@@ -429,7 +429,7 @@ export class SuiVaultClient {
           baseCoin: guardedCoin,
         });
 
-    const outputs = swap(tx);
+    const outputs = (swap as (tx: any) => Iterable<any>)(tx as any);
     if (params.recipient) {
       tx.transferObjects([...outputs], tx.pure.address(params.recipient));
     }
