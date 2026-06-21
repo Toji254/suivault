@@ -26,7 +26,7 @@
  * ============================================================================
  */
 import { Transaction } from "@mysten/sui/transactions";
-import { SuiClient, getFullnodeUrl } from "@mysten/sui/client";
+import { SuiJsonRpcClient as SuiClient, getFullnodeUrl } from "@mysten/sui/client";
 import { parseVault, parseVaultKey, parseVaultOwnerCap, parseAuditEntry, } from "./parser.js";
 // ============================================================
 // Helper Constants & Utilities
