@@ -13,6 +13,17 @@ export type SuiVaultDeepBookPoolKey = keyof typeof SUIVAULT_DEEPBOOK_TESTNET.poo
 
 export interface DeepBookCompatibleClient {}
 
+export type DeepBookActionParams = {
+  poolKey: SuiVaultDeepBookPoolKey | string;
+  amount: bigint;
+  deepAmount: bigint;
+  minOut: bigint;
+  quoteCoin?: unknown;
+  baseCoin?: unknown;
+};
+
+export type DeepBookAction = (tx: { moveCall?: (args: unknown) => unknown[] }) => Iterable<unknown>;
+
 export interface DeepBookClientOptions {
   client: DeepBookCompatibleClient | unknown;
   address: string;
@@ -20,6 +31,14 @@ export interface DeepBookClientOptions {
   coins: typeof SUIVAULT_DEEPBOOK_TESTNET.coins;
   pools: typeof SUIVAULT_DEEPBOOK_TESTNET.pools;
   packageIds: typeof SUIVAULT_DEEPBOOK_TESTNET.packageIds;
+  deepBook: {
+    swapExactQuoteForBase: (params: DeepBookActionParams) => DeepBookAction;
+    swapExactBaseForQuote: (params: DeepBookActionParams) => DeepBookAction;
+  };
+}
+
+function createNoopAction(): DeepBookAction {
+  return () => [];
 }
 
 export function createDeepBookTestnetConfig(client: unknown, address: string): DeepBookClientOptions {
@@ -30,10 +49,14 @@ export function createDeepBookTestnetConfig(client: unknown, address: string): D
     coins: SUIVAULT_DEEPBOOK_TESTNET.coins,
     pools: SUIVAULT_DEEPBOOK_TESTNET.pools,
     packageIds: SUIVAULT_DEEPBOOK_TESTNET.packageIds,
+    deepBook: {
+      swapExactQuoteForBase: () => createNoopAction(),
+      swapExactBaseForQuote: () => createNoopAction(),
+    },
   };
 }
 
-export function createDeepBookTestnetClient(client: unknown, address: string) {
+export function createDeepBookTestnetClient(client: unknown, address: string): DeepBookClientOptions {
   return createDeepBookTestnetConfig(client, address);
 }
 
