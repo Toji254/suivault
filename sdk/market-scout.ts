@@ -9,19 +9,19 @@ export class SuiJsonRpcClient {
     this.network = opts.network ?? "testnet";
   }
 
-  async getObject(_args?: unknown) {
+  async getObject(_args?: unknown): Promise<any> {
     return { data: null };
   }
 
-  async getOwnedObjects(_args?: unknown) {
+  async getOwnedObjects(_args?: unknown): Promise<any> {
     return { data: [] };
   }
 
-  async multiGetObjects(_args?: unknown) {
+  async multiGetObjects(_args?: unknown): Promise<any> {
     return [];
   }
 
-  async queryEvents(_args?: unknown) {
+  async queryEvents(_args?: unknown): Promise<any> {
     return { data: [] };
   }
 }
