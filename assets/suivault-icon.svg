@@ -1,0 +1,34 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="70%">
+      <stop offset="0%" stop-color="#12264a"/>
+      <stop offset="55%" stop-color="#07111f"/>
+      <stop offset="100%" stop-color="#02040a"/>
+    </radialGradient>
+    <linearGradient id="sui" x1="512" y1="120" x2="512" y2="920" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#67e8f9"/>
+      <stop offset="42%" stop-color="#1e6aff"/>
+      <stop offset="100%" stop-color="#0b2fdb"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="18" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" rx="210" fill="url(#bg)"/>
+  <rect x="64" y="64" width="896" height="896" rx="176" fill="#050b18" stroke="#15243c" stroke-width="4"/>
+  <path filter="url(#glow)" d="M512 128C384 286 250 433 250 613C250 777 374 896 512 896C650 896 774 777 774 613C774 433 640 286 512 128ZM512 805C412 805 330 721 330 615C330 508 413 405 512 276C611 405 694 508 694 615C694 721 612 805 512 805Z" fill="url(#sui)"/>
+  <path d="M478 332C448 398 446 458 482 516C511 563 569 581 592 629C618 683 591 755 512 785C644 779 735 684 690 558C660 474 566 455 535 394C525 373 517 354 512 332H478Z" fill="#081529" opacity="0.92"/>
+  <circle cx="520" cy="660" r="128" fill="#07152a" stroke="#1e6aff" stroke-width="18"/>
+  <circle cx="520" cy="660" r="54" fill="#102d68" stroke="#3b82f6" stroke-width="12"/>
+  <g stroke="#60a5fa" stroke-width="12" stroke-linecap="round">
+    <path d="M520 540V568"/><path d="M520 752V780"/><path d="M400 660H428"/><path d="M612 660H640"/>
+    <path d="M435 575L455 595"/><path d="M585 725L605 745"/><path d="M435 745L455 725"/><path d="M585 595L605 575"/>
+  </g>
+  <rect x="636" y="600" width="44" height="125" rx="18" fill="#061226" stroke="#1e6aff" stroke-width="10"/>
+  <rect x="628" y="600" width="60" height="35" rx="14" fill="#0d2a62" stroke="#3b82f6" stroke-width="8"/>
+  <rect x="628" y="690" width="60" height="35" rx="14" fill="#0d2a62" stroke="#3b82f6" stroke-width="8"/>
+</svg>
