@@ -124,10 +124,18 @@ export function useUnifiedExecutor() {
     if (hasWalletExtension && account?.address) {
       try {
         console.log(`[SuiVault] Executing via wallet extension: ${description}`);
-        // Wallet approval time is user-controlled, so don't fail the action just
-        // because the user spent more than 30s reviewing the prompt.
-        const result = await signAndExecuteWallet({ transaction: tx as any });
-        
+
+        // Some wallet extensions forward the payload through window.postMessage.
+        // Sending the live Transaction object can throw DataCloneError because it
+        // contains methods/closures. Build it into plain BCS bytes first; Uint8Array
+        // is structured-clone safe and accepted by Sui wallet adapters.
+        tx.setSenderIfNotSet(account.address);
+        const transactionBytes = await tx.build({ client: suiClient });
+
+        const result = await signAndExecuteWallet({
+          transaction: transactionBytes as any,
+        });
+
         if (waitForEffects) {
           await withTimeout(
             suiClient.waitForTransaction({ digest: result.digest }),
@@ -241,4 +249,3 @@ export function useUnifiedExecutor() {
     zkUser: isZkLogin ? (zkUser || { address: zkLogin.address, email: "enoki-connected@gmail.com" }) : null,
   };
 }
-
