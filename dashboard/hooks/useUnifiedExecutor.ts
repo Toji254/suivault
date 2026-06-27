@@ -129,8 +129,10 @@ export function useUnifiedExecutor() {
         // Sending the live Transaction object can throw DataCloneError because it
         // contains methods/closures. Build it into plain BCS bytes first; Uint8Array
         // is structured-clone safe and accepted by Sui wallet adapters.
+        // Cast is intentional: Vercel can install duplicate @mysten/sui versions
+        // through wallet-standard, making identical SuiClient types fail TS checks.
         tx.setSenderIfNotSet(account.address);
-        const transactionBytes = await tx.build({ client: suiClient });
+        const transactionBytes = await tx.build({ client: suiClient as any });
 
         const result = await signAndExecuteWallet({
           transaction: transactionBytes as any,
