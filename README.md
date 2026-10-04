@@ -4,6 +4,11 @@
 
 <h1 align="center">SuiVault</h1>
 
+> **Portfolio snapshot:** An on-chain policy layer for autonomous AI agents on Sui. The project uses Move smart contracts to enforce spending limits, budgets, recipient allowlists, active-hour rules, emergency freezes, and agent-key revocation.
+>
+> **Why it belongs in the portfolio:** it shows security-minded smart-contract design from a different ecosystem, with a live app and demo workflow documented below.
+
+
 <p align="center">
   <strong>On-chain financial guardrails for autonomous AI agents on Sui.</strong>
 </p>
