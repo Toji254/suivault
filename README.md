@@ -7,6 +7,8 @@
 > **Portfolio snapshot:** An on-chain policy layer for autonomous AI agents on Sui. The project uses Move smart contracts to enforce spending limits, budgets, recipient allowlists, active-hour rules, emergency freezes, and agent-key revocation.
 >
 > **Why it belongs in the portfolio:** it shows security-minded smart-contract design from a different ecosystem, with a live app and demo workflow documented below.
+>
+> **🏁 Hackathon build:** Built for the **Sui Overflow 2026 Hackathon**, targeting the **Agentic Web, DeepBook, and Walrus** ecosystem tracks.
 
 
 <p align="center">
