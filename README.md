@@ -4,11 +4,13 @@
 
 <h1 align="center">SuiVault</h1>
 
-> **Portfolio snapshot:** An on-chain policy layer for autonomous AI agents on Sui. The project uses Move smart contracts to enforce spending limits, budgets, recipient allowlists, active-hour rules, emergency freezes, and agent-key revocation.
+> **portfolio:** on-chain policy layer for autonomous ai agents on sui using move scs for spend limits, budgets, allowlists, active-hour rules, freezes, and key revocation.
 >
-> **Why it belongs in the portfolio:** it shows security-minded smart-contract design from a different ecosystem, with a live app and demo workflow documented below.
+> **tags:** `bc | move | sc sec | ai agents | defi | deepbook | walrus`
 >
-> **🏁 Hackathon build:** Built for the **Sui Overflow 2026 Hackathon**, targeting the **Agentic Web, DeepBook, and Walrus** ecosystem tracks.
+> **why it belongs in the portfolio:** it shows security-minded sc design from a different ecosystem, with a live app and demo workflow documented below.
+>
+> **🏁 hackathon build:** built for the **sui overflow 2026 hackathon**, targeting the **agentic web, deepbook, and walrus** tracks.
 
 
 <p align="center">
